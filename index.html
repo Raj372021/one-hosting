@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OneHost - Ultra Fast Cloud & Web Hosting</title>
+    <script>
+      (function() {
+        try {
+          if (window.fetch) {
+            var _nativeFetch = window.fetch.bind(window);
+            var _currentFetch = _nativeFetch;
+            Object.defineProperty(window, 'fetch', {
+              get: function() {
+                return _currentFetch;
+              },
+              set: function(val) {
+                if (typeof val === 'function') {
+                  _currentFetch = val;
+                }
+              },
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch(e) {
+          // Fallback safely if defineProperty fails
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

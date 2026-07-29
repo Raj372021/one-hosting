@@ -1,0 +1,328 @@
+import React, { useState } from 'react';
+import {
+  Server,
+  Rocket,
+  Globe,
+  CheckCircle2,
+  ArrowRight,
+  Sparkles,
+  Zap,
+  ShieldCheck
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { DomainSearchBox } from '../components/DomainSearchBox';
+import { HOSTING_PLANS, DOMAIN_PRICING } from '../data/hostingPlans';
+
+export const HomePage: React.FC = () => {
+  const { formatPrice, addToCart, setCurrentView } = useAuth();
+  const { showToast } = useToast();
+
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly' | '4years'>('4years');
+
+  const getCycleRate = (basePriceINR: number) => {
+    if (billingCycle === 'monthly') return Math.round(basePriceINR * 2);
+    if (billingCycle === 'yearly') return Math.round(basePriceINR * 1.3);
+    return basePriceINR;
+  };
+
+  const getCycleMonths = (planId: string) => {
+    if (planId === 'agency-plans') return 24;
+    if (billingCycle === 'monthly') return 1;
+    if (billingCycle === 'yearly') return 12;
+    return 48;
+  };
+
+  const getCycleTotal = (plan: typeof HOSTING_PLANS[0]) => {
+    const rate = getCycleRate(plan.monthlyPriceINR);
+    const months = getCycleMonths(plan.id);
+    return rate * months;
+  };
+
+  const handleSelectPlan = (plan: typeof HOSTING_PLANS[0]) => {
+    const rate = getCycleRate(plan.monthlyPriceINR);
+    const months = getCycleMonths(plan.id);
+    const totalPrice = getCycleTotal(plan);
+
+    addToCart({
+      id: 'cart_plan_' + plan.id + '_' + billingCycle,
+      type: 'hosting',
+      title: `${plan.name} (${months} Months Plan)`,
+      subtitle: `${plan.websites} | ${plan.storage} (@ ${formatPrice(rate)}/mo)`,
+      billingCycle,
+      price: totalPrice,
+      details: plan.freeDomain ? 'Includes FREE 1-Year Domain Name + Free SSL' : 'Includes Free Unlimited SSL'
+    });
+    showToast(`Added ${plan.name} (${months} Months Plan) to cart!`, 'success');
+  };
+
+  const [activeTab, setActiveTab] = useState<'web' | 'cloud'>('web');
+
+  const filteredPlans = HOSTING_PLANS.filter(p => p.category === activeTab);
+
+  return (
+    <div className="space-y-20 pb-20">
+      {/* 1. DOMAIN SEARCH SECTION */}
+      <section className="relative pt-10 lg:pt-16 pb-12 overflow-hidden">
+        {/* Glowing Background Radial Accents */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute top-1/3 left-1/3 w-[400px] h-[300px] bg-purple-600/15 blur-[100px] rounded-full pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center space-y-6">
+          {/* Top Pill Badge */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold tracking-wide">
+            <Globe className="w-4 h-4 text-cyan-400 animate-pulse" />
+            <span>Search & Register Your Real Domain Name</span>
+          </div>
+
+          {/* Display Headline */}
+          <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white max-w-4xl mx-auto leading-tight">
+            Search Domain, Choose Hosting &{' '}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-400">
+              Deploy Instantly
+            </span>
+          </h1>
+
+          <p className="text-sm sm:text-lg text-slate-300 max-w-2xl mx-auto font-normal leading-relaxed">
+            Instant global DNS lookup, ultra-fast NVMe cloud hosting, and 1-click GitHub cloud deployment.
+          </p>
+
+          {/* Domain Search Hero Widget */}
+          <div className="pt-2">
+            <DomainSearchBox />
+          </div>
+
+          {/* Popular Domain TLD Price Strip */}
+          <div className="pt-4 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 border-t border-slate-900/80 max-w-3xl mx-auto">
+            {DOMAIN_PRICING.slice(0, 5).map(item => (
+              <div key={item.tld} className="flex items-center gap-1.5 font-mono">
+                <span className="font-extrabold text-white">{item.tld}</span>
+                <span className="text-emerald-400 font-bold">{formatPrice(item.registerINR)}</span>
+                <span className="text-slate-600">/yr</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 2. HOSTING PLANS SECTION */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold uppercase tracking-wider">
+            <Server className="w-4 h-4" />
+            <span>Guaranteed Lowest Price Web & Cloud Hosting</span>
+          </div>
+
+          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+            Choose Your Hosting Plan
+          </h2>
+
+          {/* Category Switcher Tabs (Web Hosting vs Cloud Plans) */}
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setActiveTab('web')}
+              className={`px-6 py-2.5 rounded-2xl text-sm font-extrabold transition-all flex items-center gap-2 border ${
+                activeTab === 'web'
+                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-xl shadow-indigo-600/30'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white'
+              }`}
+            >
+              <Server className="w-4 h-4" />
+              <span>Web Hosting Plans</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('cloud')}
+              className={`px-6 py-2.5 rounded-2xl text-sm font-extrabold transition-all flex items-center gap-2 border ${
+                activeTab === 'cloud'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-500 shadow-xl shadow-purple-600/30'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white'
+              }`}
+            >
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span>Cloud Hosting Plans</span>
+            </button>
+          </div>
+
+          {/* Billing Cycle Switcher */}
+          <div className="inline-flex items-center p-1.5 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-bold text-slate-300 shadow-xl">
+            <button
+              onClick={() => setBillingCycle('monthly')}
+              className={`px-4 py-2 rounded-xl transition-all ${
+                billingCycle === 'monthly' ? 'bg-indigo-600 text-white shadow' : 'hover:text-white'
+              }`}
+            >
+              1 Month
+            </button>
+            <button
+              onClick={() => setBillingCycle('yearly')}
+              className={`px-4 py-2 rounded-xl transition-all ${
+                billingCycle === 'yearly' ? 'bg-indigo-600 text-white shadow' : 'hover:text-white'
+              }`}
+            >
+              1 Year (SAVE 20%)
+            </button>
+            <button
+              onClick={() => setBillingCycle('4years')}
+              className={`px-4 py-2 rounded-xl transition-all ${
+                billingCycle === '4years'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-purple-600/30'
+                  : 'hover:text-white'
+              }`}
+            >
+              48 Months (MAX DISCOUNT) 🔥
+            </button>
+          </div>
+        </div>
+
+        {/* Pricing Cards Grid */}
+        <div className={`grid grid-cols-1 ${filteredPlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4 gap-5' : 'md:grid-cols-3 gap-8'} pt-4`}>
+          {filteredPlans.map(plan => {
+            const rate = getCycleRate(plan.monthlyPriceINR);
+            const months = getCycleMonths(plan.id);
+            const totalPrice = getCycleTotal(plan);
+
+            return (
+              <div
+                key={plan.id}
+                className={`relative p-8 rounded-3xl border transition-all flex flex-col justify-between ${
+                  plan.popular
+                    ? 'bg-gradient-to-b from-indigo-950/90 via-slate-950 to-slate-950 border-indigo-500 shadow-2xl shadow-indigo-500/25 scale-105 z-20'
+                    : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                {plan.badge && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[11px] font-extrabold uppercase tracking-widest shadow-lg">
+                    {plan.badge}
+                  </div>
+                )}
+
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-2xl font-black text-white">{plan.name}</h3>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-slate-500 line-through text-sm font-semibold">
+                        {formatPrice(plan.originalPriceINR || plan.monthlyPriceINR * 5)}
+                      </span>
+                      {plan.discountTag && (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 text-[11px] font-extrabold border border-emerald-500/30">
+                          {plan.discountTag}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Main Price Display */}
+                  <div className="space-y-1">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">
+                        {formatPrice(rate)}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-400">/mo</span>
+                    </div>
+                    <div className="text-xs text-slate-400 pt-1 leading-snug">
+                      <div className="font-semibold text-slate-300">
+                        {months} mo. plan • {formatPrice(totalPrice)} (plus tax)
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        After, renews at {formatPrice(plan.renewalPriceINR)}/mo for 1 yr.
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleSelectPlan(plan)}
+                    className={`w-full py-4 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 transition-all shadow-xl ${
+                      plan.popular
+                        ? 'bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-600/30'
+                        : 'bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white'
+                    }`}
+                  >
+                    <span>Choose Plan</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  {/* Feature Checklist */}
+                  <div className="pt-6 border-t border-slate-800/80 space-y-3 text-xs text-slate-300">
+                    {plan.features.map((feat, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span className="font-medium text-slate-200">{feat}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 3. CLOUD DEPLOYMENT SECTION */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-r from-indigo-950/60 via-slate-950 to-purple-950/60 border border-indigo-500/30 grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+          <div className="space-y-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
+              <Rocket className="w-4 h-4" />
+              <span>INSTANT CLOUD DEPLOY ENGINE</span>
+            </div>
+
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+              1-Click Deployment for React, Node & Web Apps
+            </h2>
+
+            <p className="text-slate-300 text-sm leading-relaxed">
+              Connect your GitHub repository or upload your project code. OneHost automatically compiles, secures with Let’s Encrypt SSL, and serves your app globally.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 text-xs font-semibold text-slate-300">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>GitHub Repository Deploy</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>Environment Variable Editor</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>Live Terminal Build Logs</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>Free SSL Certificate</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setCurrentView('deployments')}
+              className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/25 transition-all"
+            >
+              <Rocket className="w-4 h-4" />
+              <span>Start Deploying Now</span>
+            </button>
+          </div>
+
+          {/* Live Terminal Preview */}
+          <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-400 space-y-2 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-slate-500">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-rose-500" />
+                <div className="w-3 h-3 rounded-full bg-amber-500" />
+                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+              </div>
+              <span className="text-[10px]">onehost-cloud-deploy-v2</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="text-slate-400">$ git push origin main</div>
+              <div>[09:01:00] Fetching repository user/my-app...</div>
+              <div>[09:01:04] Compiling web bundle with Vite & Node...</div>
+              <div>[09:01:10] Issuing SSL Certificate for domain.com</div>
+              <div className="text-cyan-400 font-bold">[09:01:12] App successfully LIVE at https://my-app.onehost.app ✨</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};

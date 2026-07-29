@@ -1,0 +1,6 @@
+{
+  "name": "OneHost",
+  "description": "Premium SaaS Web Hosting & Cloud Platform with cPanel-style Hosting Controls, Domain Management, Instant Deployments, Admin Portal, and Billing System",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
