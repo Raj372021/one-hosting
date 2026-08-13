@@ -363,8 +363,102 @@ CRITICAL REQUIREMENTS:
     }
   }
 
-  // Template fallback for static offline or missing API key with rich interactive features
-  const fallbackHtml = `<!DOCTYPE html>
+  // Template fallback for static offline or missing API key with prompt-aware interactive features
+  let fallbackHtml = '';
+  const lowerPrompt = payload.prompt.toLowerCase();
+
+  if (lowerPrompt.includes('calc')) {
+    fallbackHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900/90 backdrop-blur-xl border border-purple-500/30 rounded-3xl shadow-2xl p-6 space-y-6">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-pink-500 to-violet-500 flex items-center justify-center text-white font-bold"><i class="fa-solid fa-calculator"></i></div>
+        <h1 class="text-lg font-black tracking-tight text-white">${title}</h1>
+      </div>
+      <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold">Live Calculator</span>
+    </div>
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-right">
+      <div id="history" class="text-xs text-slate-500 h-6">0</div>
+      <div id="display" class="text-4xl font-extrabold text-white tracking-wider overflow-x-auto">0</div>
+    </div>
+    <div class="grid grid-cols-4 gap-3">
+      <button onclick="clearDisplay()" class="p-4 rounded-2xl bg-rose-500/20 text-rose-300 font-bold hover:bg-rose-500/30 transition-all border border-rose-500/30">C</button>
+      <button onclick="appendValue('%')" class="p-4 rounded-2xl bg-slate-800 text-purple-300 font-bold hover:bg-slate-700 transition-all border border-slate-700">%</button>
+      <button onclick="appendValue('/')" class="p-4 rounded-2xl bg-slate-800 text-purple-300 font-bold hover:bg-slate-700 transition-all border border-slate-700">÷</button>
+      <button onclick="appendValue('*')" class="p-4 rounded-2xl bg-purple-600 text-white font-bold hover:bg-purple-500 transition-all shadow-lg shadow-purple-600/30">×</button>
+
+      <button onclick="appendValue('7')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">7</button>
+      <button onclick="appendValue('8')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">8</button>
+      <button onclick="appendValue('9')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">9</button>
+      <button onclick="appendValue('-')" class="p-4 rounded-2xl bg-purple-600 text-white font-bold hover:bg-purple-500 transition-all shadow-lg shadow-purple-600/30">-</button>
+
+      <button onclick="appendValue('4')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">4</button>
+      <button onclick="appendValue('5')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">5</button>
+      <button onclick="appendValue('6')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">6</button>
+      <button onclick="appendValue('+')" class="p-4 rounded-2xl bg-purple-600 text-white font-bold hover:bg-purple-500 transition-all shadow-lg shadow-purple-600/30">+</button>
+
+      <button onclick="appendValue('1')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">1</button>
+      <button onclick="appendValue('2')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">2</button>
+      <button onclick="appendValue('3')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">3</button>
+      <button onclick="calculateResult()" class="p-4 rounded-2xl bg-gradient-to-t from-pink-600 to-purple-600 text-white font-bold row-span-2 flex items-center justify-center hover:from-pink-500 hover:to-purple-500 transition-all shadow-xl shadow-purple-600/30">=</button>
+
+      <button onclick="appendValue('0')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg col-span-2">0</button>
+      <button onclick="appendValue('.')" class="p-4 rounded-2xl bg-slate-800 hover:bg-slate-700 transition-all font-bold text-lg">.</button>
+    </div>
+  </div>
+  <script>
+    let currentInput = '0';
+    let historyStr = '';
+    const display = document.getElementById('display');
+    const history = document.getElementById('history');
+
+    function updateDisplay() {
+      display.innerText = currentInput;
+      history.innerText = historyStr;
+    }
+
+    function appendValue(val) {
+      if (currentInput === '0' && !['+', '-', '*', '/', '%', '.'].includes(val)) {
+        currentInput = val;
+      } else {
+        currentInput += val;
+      }
+      updateDisplay();
+    }
+
+    function clearDisplay() {
+      currentInput = '0';
+      historyStr = '';
+      updateDisplay();
+    }
+
+    function calculateResult() {
+      try {
+        historyStr = currentInput;
+        let sanitized = currentInput.replace(/×/g, '*').replace(/÷/g, '/');
+        let res = eval(sanitized);
+        currentInput = String(res);
+        updateDisplay();
+      } catch (e) {
+        currentInput = 'Error';
+        updateDisplay();
+        setTimeout(clearDisplay, 1500);
+      }
+    }
+  </script>
+</body>
+</html>`;
+  } else {
+    fallbackHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -400,7 +494,7 @@ CRITICAL REQUIREMENTS:
           <i class="fa-solid fa-rocket"></i> Get Started Free
         </button>
         <button onclick="handleAction('secondary')" class="px-7 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold border border-slate-700 transition-all flex items-center gap-2">
-          <i class="fa-solid fa-code">View Documentation</i>
+          <i class="fa-solid fa-code"></i> View Documentation
         </button>
       </div>
     </div>
@@ -438,6 +532,7 @@ CRITICAL REQUIREMENTS:
   </script>
 </body>
 </html>`;
+  }
 
   return {
     title,
