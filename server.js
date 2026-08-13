@@ -29,7 +29,7 @@ var import_vite = require("vite");
 var import_genai = require("@google/genai");
 var import_promises = __toESM(require("node:dns/promises"), 1);
 var app = (0, import_express.default)();
-var PORT = 3e3;
+var PORT = Number(process.env.PORT) || 3e3;
 app.use(import_express.default.json({ limit: "10mb" }));
 var db = {
   users: [
