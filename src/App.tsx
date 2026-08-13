@@ -10,6 +10,7 @@ import { LiveChatWidget } from './components/LiveChatWidget';
 import { HomePage } from './pages/HomePage';
 import { UserDashboard } from './pages/UserDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { N8nAutomationHub } from './components/N8nAutomationHub';
 import { InvoiceItem } from './types';
 
 const MainAppContent: React.FC = () => {
@@ -31,6 +32,12 @@ const MainAppContent: React.FC = () => {
         {currentView === 'domains' && <HomePage onOpenCart={() => setIsCartOpen(true)} />}
         {currentView === 'hosting' && <HomePage onOpenCart={() => setIsCartOpen(true)} />}
         {currentView === 'pricing' && <HomePage onOpenCart={() => setIsCartOpen(true)} />}
+
+        {currentView === 'n8n' && (
+          <div className="py-8">
+            <N8nAutomationHub />
+          </div>
+        )}
 
         {currentView === 'dashboard' && <UserDashboard />}
         {currentView === 'deployments' && <UserDashboard />}

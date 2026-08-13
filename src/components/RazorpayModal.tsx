@@ -7,6 +7,7 @@ import { createBillingOrder } from '../services/api';
 interface RazorpayModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onBack?: () => void;
   subtotal: number;
   discount: number;
   appliedCoupon?: string;
@@ -17,13 +18,14 @@ interface RazorpayModalProps {
 export const RazorpayModal: React.FC<RazorpayModalProps> = ({
   isOpen,
   onClose,
+  onBack,
   subtotal,
   discount,
   appliedCoupon,
   items,
   onSuccess
 }) => {
-  const { formatPrice, user } = useAuth();
+  const { formatPrice, user, checkoutCartAndActivatePlans } = useAuth();
   const { showToast } = useToast();
 
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking' | 'wallet'>('upi');
@@ -32,6 +34,8 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
   const [cardNumber, setCardNumber] = useState('4532 •••• •••• 8812');
 
   if (!isOpen) return null;
+
+  const handleBack = onBack || onClose;
 
   const finalSubtotal = Math.max(0, subtotal - discount);
   const gstAmount = Math.round(finalSubtotal * 0.18 * 100) / 100;
@@ -51,7 +55,8 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
 
       setIsProcessing(false);
       if (res.success && res.invoice) {
-        showToast('Payment successful! Auto GST Invoice generated.', 'success');
+        checkoutCartAndActivatePlans();
+        showToast('Payment successful! Plan instantly activated in your profile.', 'success');
         onSuccess(res.invoice);
         onClose();
       } else {
@@ -67,12 +72,13 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         <div className="p-5 bg-gradient-to-r from-indigo-950 via-slate-900 to-purple-950 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={onClose}
-              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-bold"
-              title="Go Back to Cart"
+              type="button"
+              onClick={handleBack}
+              className="p-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold border border-slate-700 cursor-pointer"
+              title="Go Back"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back</span>
+              <ArrowLeft className="w-4 h-4 text-amber-400" />
+              <span>← Back</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -92,8 +98,9 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
             title="Close Checkout"
           >
             <X className="w-5 h-5" />
@@ -131,10 +138,11 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
+                type="button"
                 onClick={() => setPaymentMethod('upi')}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-2 text-xs font-semibold transition-all ${
+                className={`p-3 rounded-xl border flex flex-col items-center gap-2 text-xs font-semibold transition-all cursor-pointer ${
                   paymentMethod === 'upi'
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-md'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
@@ -143,10 +151,11 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => setPaymentMethod('card')}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-2 text-xs font-semibold transition-all ${
+                className={`p-3 rounded-xl border flex flex-col items-center gap-2 text-xs font-semibold transition-all cursor-pointer ${
                   paymentMethod === 'card'
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-md'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
@@ -155,10 +164,11 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => setPaymentMethod('netbanking')}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-2 text-xs font-semibold transition-all ${
+                className={`p-3 rounded-xl border flex flex-col items-center gap-2 text-xs font-semibold transition-all cursor-pointer ${
                   paymentMethod === 'netbanking'
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-md'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
@@ -167,10 +177,11 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => setPaymentMethod('wallet')}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-2 text-xs font-semibold transition-all ${
+                className={`p-3 rounded-xl border flex flex-col items-center gap-2 text-xs font-semibold transition-all cursor-pointer ${
                   paymentMethod === 'wallet'
-                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                    ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 shadow-md'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
@@ -182,29 +193,78 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
 
           {/* Method Details */}
           {paymentMethod === 'upi' && (
-            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col items-center text-center space-y-3">
-              <div className="p-3 bg-white rounded-xl shadow-lg">
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col items-center text-center space-y-3.5 relative">
+              {/* Internal Back Button for UPI/QR */}
+              <div className="w-full flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+                  <QrCode className="w-4 h-4 text-emerald-400" />
+                  <span>Instant UPI / QR Code Payment</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-purple-300 hover:text-white text-xs font-extrabold border border-purple-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+                  <span>← Back</span>
+                </button>
+              </div>
+
+              <div className="p-3 bg-white rounded-2xl shadow-xl ring-4 ring-indigo-500/20">
                 <img
-                  src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=upi://pay?pa=onehost@razorpay&pn=OneHostCloud&am=588.82&cu=INR"
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=upi://pay?pa=onehost@razorpay&pn=OneHostCloud&am=${grandTotal}&cu=INR`}
                   alt="UPI QR Code"
-                  className="w-28 h-28"
+                  className="w-32 h-32"
                 />
               </div>
-              <div className="text-xs text-slate-300">
-                Scan with <span className="text-white font-bold">Google Pay, PhonePe, Paytm, or BHIM</span>
+
+              <div className="text-xs text-slate-300 space-y-0.5">
+                <div className="font-bold text-white">Scan with any UPI App</div>
+                <div className="text-[11px] text-slate-400">Google Pay, PhonePe, Paytm, BHIM, or CRED</div>
               </div>
-              <input
-                type="text"
-                value={upiId}
-                onChange={e => setUpiId(e.target.value)}
-                placeholder="or enter VPA (e.g. name@upi)"
-                className="w-full max-w-xs px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white text-center focus:outline-none"
-              />
+
+              <div className="w-full max-w-sm space-y-1.5 pt-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-left">
+                  Or Enter UPI VPA ID
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={upiId}
+                    onChange={e => setUpiId(e.target.value)}
+                    placeholder="e.g. name@upi"
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePayNow}
+                    disabled={isProcessing}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                  >
+                    Pay
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
           {paymentMethod === 'card' && (
             <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+                  <CreditCard className="w-4 h-4 text-indigo-400" />
+                  <span>Card Details</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-purple-300 hover:text-white text-xs font-extrabold border border-purple-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+                  <span>← Back</span>
+                </button>
+              </div>
+
               <input
                 type="text"
                 value={cardNumber}
@@ -227,19 +287,33 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
           )}
 
           {paymentMethod === 'netbanking' && (
-            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-2">
-              <div className="text-slate-400 font-medium">Select Bank:</div>
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div className="flex items-center gap-2 font-bold text-slate-200">
+                  <Building className="w-4 h-4 text-purple-400" />
+                  <span>Select Bank</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-purple-300 hover:text-white text-xs font-extrabold border border-purple-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+                  <span>← Back</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-2 font-semibold">
-                <button className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-left hover:border-indigo-500">
+                <button type="button" className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-left hover:border-indigo-500 text-slate-200 cursor-pointer">
                   HDFC Bank
                 </button>
-                <button className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-left hover:border-indigo-500">
+                <button type="button" className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-left hover:border-indigo-500 text-slate-200 cursor-pointer">
                   State Bank of India
                 </button>
-                <button className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-left hover:border-indigo-500">
+                <button type="button" className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-left hover:border-indigo-500 text-slate-200 cursor-pointer">
                   ICICI Bank
                 </button>
-                <button className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-left hover:border-indigo-500">
+                <button type="button" className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-left hover:border-indigo-500 text-slate-200 cursor-pointer">
                   Axis Bank
                 </button>
               </div>
@@ -247,41 +321,58 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
           )}
 
           {paymentMethod === 'wallet' && (
-            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-2">
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <div className="flex items-center gap-2 font-bold text-slate-200">
+                  <Wallet className="w-4 h-4 text-cyan-400" />
+                  <span>OneHost Wallet Balance</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-purple-300 hover:text-white text-xs font-extrabold border border-purple-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+                  <span>← Back</span>
+                </button>
+              </div>
+
               <div className="flex justify-between items-center text-slate-300">
-                <span>OneHost Wallet Balance:</span>
-                <span className="font-bold text-emerald-400">{formatPrice(user?.walletBalance || 0)}</span>
+                <span>Available Balance:</span>
+                <span className="font-bold text-emerald-400 text-sm">{formatPrice(user?.walletBalance || 0)}</span>
               </div>
-              <div className="text-slate-500">
+              <p className="text-slate-400 text-[11px]">
                 Sufficient funds available in your account wallet balance.
-              </div>
+              </p>
             </div>
           )}
 
           {/* Submit Payment CTA with Back Button */}
           <div className="flex items-center gap-3 pt-2">
             <button
-              onClick={onClose}
+              type="button"
+              onClick={handleBack}
               disabled={isProcessing}
-              className="px-5 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-all flex items-center justify-center gap-2 border border-slate-700"
+              className="px-5 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700 shadow-md cursor-pointer"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back</span>
+              <ArrowLeft className="w-4 h-4 text-amber-400" />
+              <span>← Back</span>
             </button>
 
             <button
+              type="button"
               onClick={handlePayNow}
               disabled={isProcessing}
-              className="flex-1 py-4 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:opacity-90 text-white font-bold text-base shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all"
+              className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:opacity-90 text-white font-extrabold text-sm shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               {isProcessing ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   <span>Verifying Razorpay Webhook...</span>
                 </div>
               ) : (
                 <>
-                  <Lock className="w-5 h-5" />
+                  <Lock className="w-4 h-4" />
                   <span>Pay {formatPrice(grandTotal)}</span>
                 </>
               )}

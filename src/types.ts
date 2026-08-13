@@ -1,6 +1,72 @@
 export type Currency = 'INR' | 'USD';
 export type ThemeMode = 'dark' | 'light';
 
+export interface UserSubscription {
+  id: string;
+  title: string;
+  category: 'n8n' | 'hosting' | 'vps' | 'wordpress' | 'domain' | 'ai_saas' | string;
+  planName: string;
+  status: 'ACTIVE' | 'PROVISIONING' | 'EXPIRED';
+  monthlyPrice: number;
+  billingCycle: string;
+  activatedAt: string;
+  renewAt: string;
+  instanceUrl?: string;
+  webhookUrl?: string;
+  apiKey?: string;
+  serverIp?: string;
+  details?: string;
+}
+
+export interface N8nWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  category: 'crm' | 'whatsapp' | 'ai' | 'ecommerce' | 'social' | 'custom' | string;
+  active: boolean;
+  triggerType: 'webhook' | 'cron' | 'event' | 'manual';
+  executionsCount: number;
+  lastExecutionAt?: string;
+  webhookUrl: string;
+  nodesCount: number;
+  flowJson?: string;
+}
+
+export interface UserBankDetails {
+  accountName: string;
+  bankName: string;
+  accountNumber: string;
+  ifsc: string;
+  upiId: string;
+  phone: string;
+}
+
+export interface PayoutRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  amount: number;
+  rewardTier: string;
+  invitesMilestone: number;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedAt: string;
+  processedAt?: string;
+  bankDetails: UserBankDetails;
+}
+
+export interface ReferralSale {
+  id: string;
+  referrerCode: string;
+  referrerName: string;
+  referredCustomerName: string;
+  referredCustomerEmail: string;
+  planName: string;
+  amount: number;
+  purchasedAt: string;
+  status: 'QUALIFIED_PLAN_PURCHASE';
+}
+
 export interface User {
   id: string;
   name: string;
@@ -14,6 +80,14 @@ export interface User {
   createdAt: string;
   phone?: string;
   gstin?: string;
+  subscriptions?: UserSubscription[];
+  n8nWorkflows?: N8nWorkflow[];
+  referralCode?: string;
+  invitedCount?: number;
+  referralEarnings?: number;
+  bankDetails?: UserBankDetails;
+  payoutRequests?: PayoutRequest[];
+  referralSales?: ReferralSale[];
 }
 
 export type HostingPlanType = 'single' | 'premium' | 'business' | 'cloud-startup' | 'cloud-professional' | 'cloud-enterprise' | string;
@@ -23,7 +97,7 @@ export interface HostingPlan {
   name: string;
   badge?: string;
   popular?: boolean;
-  category?: 'web' | 'cloud';
+  category?: 'web' | 'cloud' | 'vps' | 'wordpress' | 'dedicated' | 'reseller' | 'ai_agent' | string;
   originalPriceINR?: number;
   monthlyPriceINR: number;
   monthlyPriceUSD: number;

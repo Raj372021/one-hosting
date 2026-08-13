@@ -15,9 +15,21 @@ function getEffectiveApiKey(userKey?: string): string | null {
   if (userKey && userKey.trim()) return userKey.trim();
   const stored = typeof window !== 'undefined' ? localStorage.getItem('onehost_google_api_key') : null;
   if (stored && stored.trim()) return stored.trim();
-  const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-  if (envKey && envKey.trim()) return envKey.trim();
+  const envVite = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+  if (envVite && envVite.trim()) return envVite.trim();
+  const envGemini = (import.meta as any).env?.GEMINI_API_KEY;
+  if (envGemini && envGemini.trim()) return envGemini.trim();
   return null;
+}
+
+// Helper to normalize model string for Google GenAI SDK across all deployments
+function normalizeModelName(model?: string): string {
+  if (!model) return 'gemini-2.5-flash';
+  const m = model.toLowerCase();
+  if (m.includes('pro') || m.includes('opus') || m.includes('research') || m.includes('sonnet') || m.includes('claude') || m.includes('sol')) {
+    return 'gemini-2.5-pro';
+  }
+  return 'gemini-2.5-flash';
 }
 
 export async function checkDomainAvailability(query: string): Promise<DomainSearchResult[]> {
@@ -325,7 +337,7 @@ export async function generateAiApp(payload: { prompt: string; category?: string
     try {
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: targetModel,
+        model: normalizeModelName(targetModel),
         contents: `You are an elite AI Web Application Architect and Vibe Coder.
 Generate a complete, modern, fully functional single-file HTML web application based on this prompt:
 Prompt: "${payload.prompt}"
@@ -430,7 +442,7 @@ export async function runAiAgentTask(taskType: string, payload: any, model?: str
 
       if (promptText) {
         const response = await ai.models.generateContent({
-          model: targetModel,
+          model: normalizeModelName(targetModel),
           contents: promptText
         });
         return { output: response.text || 'Task completed.' };

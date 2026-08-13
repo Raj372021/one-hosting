@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
@@ -674,11 +675,35 @@ Format output with Markdown bullet points and performance metric suggestions.`
   }
 });
 
+// Helper to normalize model string for Google GenAI SDK across all deployments & external models
+function normalizeModelName(model?: string): string {
+  if (!model) return 'gemini-2.5-flash';
+  const m = model.toLowerCase();
+  if (
+    m.includes('pro') ||
+    m.includes('opus') ||
+    m.includes('research') ||
+    m.includes('sonnet') ||
+    m.includes('claude') ||
+    m.includes('cursor') ||
+    m.includes('deepseek') ||
+    m.includes('gpt-4') ||
+    m.includes('gpt4') ||
+    m.includes('openai') ||
+    m.includes('llama') ||
+    m.includes('sol') ||
+    m.includes('reasoning')
+  ) {
+    return 'gemini-2.5-pro';
+  }
+  return 'gemini-2.5-flash';
+}
+
 // Gemini AI Single Prompt Web App & Website Builder endpoint
 app.post('/api/ai/generate-app', async (req: Request, res: Response) => {
   try {
     const { prompt = 'Modern web app', category = 'E-Commerce', style = 'Modern Dark', model = 'gemini-3.6-flash', userApiKey } = req.body;
-    const apiKey = userApiKey || process.env.GEMINI_API_KEY;
+    const apiKey = userApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
 
     let title = prompt.split(' ').slice(0, 4).join(' ').replace(/[^a-zA-Z0-9 ]/g, '') || 'Custom AI Web Application';
     title = title.charAt(0).toUpperCase() + title.slice(1);
@@ -688,8 +713,7 @@ app.post('/api/ai/generate-app', async (req: Request, res: Response) => {
     if (apiKey) {
       try {
         const ai = new GoogleGenAI({ apiKey });
-        // Normalize model string or pass directly
-        const targetModel = model || 'gemini-3.6-flash';
+        const targetModel = normalizeModelName(model);
         const response = await ai.models.generateContent({
           model: targetModel,
           contents: `You are an elite AI Web Application Architect and Vibe Coder.
@@ -946,7 +970,7 @@ Requirements:
 app.post('/api/ai/agent-task', async (req: Request, res: Response) => {
   try {
     const { taskType, payload, model = 'gemini-3.6-flash', userApiKey } = req.body;
-    const apiKey = userApiKey || process.env.GEMINI_API_KEY;
+    const apiKey = userApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
 
     if (apiKey) {
       try {
@@ -966,7 +990,7 @@ app.post('/api/ai/agent-task', async (req: Request, res: Response) => {
         }
 
         if (promptText) {
-          const targetModel = model || 'gemini-3.6-flash';
+          const targetModel = normalizeModelName(model);
           const response = await ai.models.generateContent({
             model: targetModel,
             contents: promptText
@@ -1133,6 +1157,35 @@ publishedSites.set('sample-store-9482', {
   domain: 'sample-store-9482.onehost.cloud'
 });
 
+// Persistent Disk Storage for Published Deployed Websites
+const SITES_STORAGE_FILE = path.join(process.cwd(), 'published_sites.json');
+
+const saveSitesToDisk = () => {
+  try {
+    const obj = Object.fromEntries(publishedSites);
+    fs.writeFileSync(SITES_STORAGE_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save published sites to disk:', err);
+  }
+};
+
+const loadSitesFromDisk = () => {
+  try {
+    if (fs.existsSync(SITES_STORAGE_FILE)) {
+      const data = fs.readFileSync(SITES_STORAGE_FILE, 'utf-8');
+      const parsed = JSON.parse(data);
+      Object.entries(parsed).forEach(([k, v]) => {
+        publishedSites.set(k, v as any);
+      });
+      console.log(`Loaded ${publishedSites.size} published sites from disk.`);
+    }
+  } catch (err) {
+    console.error('Failed to load published sites from disk:', err);
+  }
+};
+
+loadSitesFromDisk();
+
 app.post('/api/deployments/publish', (req: Request, res: Response) => {
   const { siteId, title, code, domain } = req.body;
   if (!siteId || !code) {
@@ -1140,35 +1193,85 @@ app.post('/api/deployments/publish', (req: Request, res: Response) => {
   }
 
   const cleanId = String(siteId).toLowerCase().replace(/[^a-z0-9-]/g, '-');
-  publishedSites.set(cleanId, {
+  const siteObj = {
     id: cleanId,
     title: title || 'Live Website',
     code,
-    domain: domain || `${cleanId}.onehost.cloud`
-  });
+    domain: domain || `${cleanId}.onehost.cloud`,
+    publishedAt: new Date().toISOString()
+  };
+
+  publishedSites.set(cleanId, siteObj);
+  saveSitesToDisk();
 
   res.json({
     success: true,
     siteId: cleanId,
-    path: `/sites/${cleanId}`
+    path: `/sites/${cleanId}`,
+    shortPath: `/s/${cleanId}`,
+    url: `${req.protocol}://${req.get('host')}/sites/${cleanId}`
   });
 });
 
-app.get('/sites/:siteId', (req: Request, res: Response) => {
+app.get('/api/deployments/list', (req: Request, res: Response) => {
+  const list = Array.from(publishedSites.values()).map(s => ({
+    id: s.id,
+    title: s.title,
+    domain: s.domain,
+    path: `/sites/${s.id}`,
+    url: `${req.protocol}://${req.get('host')}/sites/${s.id}`
+  }));
+  res.json({ success: true, count: list.length, sites: list });
+});
+
+app.get('/api/sites/:siteId', (req: Request, res: Response) => {
   const { siteId } = req.params;
   const cleanId = String(siteId).toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const site = publishedSites.get(cleanId);
 
   if (!site) {
+    return res.status(404).json({ success: false, error: 'Site not found' });
+  }
+
+  res.json({ success: true, site });
+});
+
+// Direct Web Route for Google / Browser visits
+const renderSiteHtmlHandler = (req: Request, res: Response) => {
+  const siteId = req.params.siteId;
+  const cleanId = String(siteId).toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  let site = publishedSites.get(cleanId);
+
+  // Fallback lookup if cleanId contains custom domain or sub
+  if (!site) {
+    for (const s of publishedSites.values()) {
+      if (s.domain && (s.domain.includes(cleanId) || cleanId.includes(s.id))) {
+        site = s;
+        break;
+      }
+    }
+  }
+
+  if (!site) {
     return res.status(404).send(`
       <!DOCTYPE html>
-      <html>
-        <head><title>404 Site Not Found</title><script src="https://cdn.tailwindcss.com"></script></head>
-        <body class="bg-slate-950 text-white flex flex-col items-center justify-center min-h-screen font-sans">
-          <div class="text-center p-8 bg-slate-900 border border-slate-800 rounded-2xl max-w-md">
-            <h1 class="text-3xl font-extrabold text-rose-500 mb-2">404 - Site Not Found</h1>
-            <p class="text-slate-400 text-sm mb-4">No live deployed website found at ID <code>${cleanId}</code>.</p>
-            <a href="/" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl inline-block">Return to OneHost Studio</a>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>404 Site Not Found - OneHost Cloud</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+        </head>
+        <body class="bg-slate-950 text-white flex flex-col items-center justify-center min-h-screen font-sans p-4">
+          <div class="text-center p-8 bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full shadow-2xl space-y-4">
+            <div class="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto text-2xl font-black border border-rose-500/30">
+              404
+            </div>
+            <h1 class="text-2xl font-black text-white">Live Site Not Found</h1>
+            <p class="text-slate-400 text-xs leading-relaxed">No deployed website found at ID <code class="text-cyan-400 font-mono">${cleanId}</code>. Make sure the site was published or re-deploy it from OneHost AI Studio.</p>
+            <a href="/" class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black rounded-xl inline-block shadow-lg">
+              Return to OneHost Studio
+            </a>
           </div>
         </body>
       </html>
@@ -1176,8 +1279,13 @@ app.get('/sites/:siteId', (req: Request, res: Response) => {
   }
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('X-Powered-By', 'OneHost Edge CDN');
   res.send(site.code);
-});
+};
+
+app.get('/sites/:siteId', renderSiteHtmlHandler);
+app.get('/s/:siteId', renderSiteHtmlHandler);
 
 // Start Server with Vite Middleware in Dev
 async function startServer() {

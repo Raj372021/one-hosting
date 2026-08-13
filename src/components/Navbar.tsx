@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { AuthModal } from './AuthModal';
 import {
   Server,
   Globe,
@@ -17,7 +18,8 @@ import {
   Menu,
   X,
   CreditCard,
-  Headphones
+  Headphones,
+  Workflow
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -43,6 +45,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isHostingDropdownOpen, setIsHostingDropdownOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalInitialMode, setAuthModalInitialMode] = useState<'signin' | 'register' | 'forgot'>('signin');
 
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur-xl bg-[#05050C]/90 border-b border-white/5 text-slate-100 transition-colors">
@@ -92,6 +96,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
             >
               <Server className="w-4 h-4 text-indigo-400" />
               <span>Hosting Plans</span>
+            </button>
+
+            <button
+              onClick={() => setCurrentView('n8n')}
+              className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-2 ${
+                currentView === 'n8n'
+                  ? 'bg-purple-600/30 text-purple-300 font-bold border border-purple-500/40 shadow-lg shadow-purple-500/10'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Workflow className="w-4 h-4 text-purple-400" />
+              <span>n8n Automations</span>
             </button>
 
             <button
@@ -194,16 +210,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
                       <span className="font-bold">{formatPrice(user.walletBalance)}</span>
                     </div>
 
-                    {/* Buy AI Credits Button Under Profile */}
+                    {/* AI Credits Count & Buy Button */}
+                    <div className="mt-1.5 text-xs font-medium text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-lg flex items-center justify-between">
+                      <span>AI Credits Available:</span>
+                      <span className="font-black text-amber-300">{user.aiCredits ?? 100}</span>
+                    </div>
+
                     <button
                       onClick={() => {
                         setCurrentView('billing');
                         setIsUserDropdownOpen(false);
                       }}
-                      className="mt-2.5 w-full px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all border border-cyan-400/30"
+                      className="mt-2.5 w-full px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all border border-cyan-400/30"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                      <span>Buy AI Credits</span>
+                      <span>Buy AI Credits Pack</span>
                     </button>
                   </div>
 
@@ -215,13 +236,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
                     <span>Customer Dashboard</span>
                   </button>
 
-                  <button
-                    onClick={() => { setCurrentView('admin'); setIsUserDropdownOpen(false); }}
-                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-purple-300 hover:bg-purple-950/40 flex items-center gap-2"
-                  >
-                    <Shield className="w-4 h-4 text-purple-400" />
-                    <span>Admin Command Center</span>
-                  </button>
+                  {/* Show Admin Command Center ONLY if user is an admin */}
+                  {user.role === 'admin' && (
+                    <button
+                      onClick={() => { setCurrentView('admin'); setIsUserDropdownOpen(false); }}
+                      className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-purple-300 hover:bg-purple-950/40 flex items-center gap-2"
+                    >
+                      <Shield className="w-4 h-4 text-purple-400" />
+                      <span>Admin Command Center</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => { setCurrentView('billing'); setIsUserDropdownOpen(false); }}
@@ -254,16 +278,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
           ) : (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => login('user')}
-                className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-200 hover:text-white transition-all"
+                onClick={() => { setAuthModalInitialMode('signin'); setIsAuthModalOpen(true); }}
+                className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-200 hover:text-white transition-all cursor-pointer"
               >
                 Sign In
               </button>
               <button
-                onClick={() => login('admin')}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-xs font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all"
+                onClick={() => { setAuthModalInitialMode('register'); setIsAuthModalOpen(true); }}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-xs font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all cursor-pointer"
               >
-                Admin Login
+                Sign Up
+              </button>
+              <button
+                onClick={() => login('admin')}
+                className="px-2.5 py-2 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/30 text-[11px] font-semibold text-purple-300 transition-all cursor-pointer hidden md:block"
+                title="Super Admin Direct Access"
+              >
+                Admin
               </button>
             </div>
           )}
@@ -277,6 +308,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
           </button>
         </div>
       </div>
+
+      {/* Auth Modal Component */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authModalInitialMode}
+      />
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (

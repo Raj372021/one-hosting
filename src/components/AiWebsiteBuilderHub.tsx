@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import JSZip from 'jszip';
 import {
   Sparkles,
   Bot,
@@ -15,10 +16,12 @@ import {
   Palette,
   ShieldAlert,
   Globe,
+  ShoppingCart,
   ExternalLink,
   RefreshCw,
   Layers,
   ArrowRight,
+  ArrowLeft,
   Play,
   Cpu,
   CheckCircle2,
@@ -39,7 +42,10 @@ import {
   Monitor,
   Maximize2,
   Terminal,
-  Pencil
+  Pencil,
+  Upload,
+  FolderArchive,
+  FileArchive
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -53,7 +59,7 @@ interface AiWebsiteBuilderHubProps {
 
 export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initialAgent = 'builder' }) => {
   const { showToast } = useToast();
-  const { user, addAiCredits, deductAiCredits, formatPrice } = useAuth();
+  const { user, addAiCredits, deductAiCredits, formatPrice, setCurrentView } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'builder' | 'research' | 'vision' | 'voice' | 'code' | 'db' | 'seo' | 'brand' | 'security'>(initialAgent);
   
@@ -75,12 +81,33 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [tempApiKey, setTempApiKey] = useState(userApiKey);
 
-  // AI Credit Modal State
+  // AI Credit Modal State & Discount Timer
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
   const [selectedCreditPack, setSelectedCreditPack] = useState<{ name: string; credits: number; price: number } | null>(null);
   const [isRazorpayOpen, setIsRazorpayOpen] = useState(false);
+  const [timeLeft, setTimeLeft] = useState({ minutes: 14, seconds: 52 });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev.seconds > 0) {
+          return { ...prev, seconds: prev.seconds - 1 };
+        } else if (prev.minutes > 0) {
+          return { minutes: prev.minutes - 1, seconds: 59 };
+        }
+        return { minutes: 15, seconds: 0 };
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Agent 1: Website & App Builder State
+  const [creationMode, setCreationMode] = useState<'ai' | 'zip' | 'code'>('ai');
+  const [rawPastedCode, setRawPastedCode] = useState('');
+  const [customSiteTitle, setCustomSiteTitle] = useState('');
+  const [isProcessingZip, setIsProcessingZip] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [appPrompt, setAppPrompt] = useState('');
   const [appCategory, setAppCategory] = useState('E-Commerce & Store');
   const [appStyle, setAppStyle] = useState('Modern Glassmorphism & Dark');
@@ -94,6 +121,109 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
     techStack: string[];
     suggestedDomain: string;
   } | null>(null);
+
+  // Handle ZIP / HTML File Upload & Extraction
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
+    const fileName = file.name.toLowerCase();
+    if (!fileName.endsWith('.zip') && !fileName.endsWith('.html') && !fileName.endsWith('.htm')) {
+      showToast('Please upload a valid .zip archive or .html file!', 'error');
+      return;
+    }
+
+    setIsProcessingZip(true);
+    showToast(`📦 Reading & extracting "${file.name}"...`, 'info');
+
+    try {
+      let extractedHtml = '';
+      const baseTitle = file.name.replace(/\.[^/.]+$/, '');
+      const siteTitle = (customSiteTitle.trim() || baseTitle).charAt(0).toUpperCase() + (customSiteTitle.trim() || baseTitle).slice(1);
+
+      if (fileName.endsWith('.html') || fileName.endsWith('.htm')) {
+        extractedHtml = await file.text();
+      } else {
+        const zip = new JSZip();
+        const zipData = await zip.loadAsync(file);
+
+        let indexFile = zipData.file('index.html') || zipData.file('index.htm');
+        if (!indexFile) {
+          const htmlFiles = Object.keys(zipData.files).filter(f => !zipData.files[f].dir && (f.endsWith('.html') || f.endsWith('.htm')));
+          if (htmlFiles.length > 0) {
+            indexFile = zipData.file(htmlFiles[0]);
+          }
+        }
+
+        if (!indexFile) {
+          showToast('❌ No index.html found in ZIP archive!', 'error');
+          setIsProcessingZip(false);
+          return;
+        }
+
+        extractedHtml = await indexFile.async('string');
+
+        // Extract & inline CSS
+        const cssFiles = Object.keys(zipData.files).filter(f => !zipData.files[f].dir && f.endsWith('.css'));
+        for (const cssPath of cssFiles) {
+          const cssContent = await zipData.files[cssPath].async('string');
+          if (cssContent && !extractedHtml.includes(cssContent.substring(0, 30))) {
+            extractedHtml = extractedHtml.replace('</head>', `<style>\n/* Inlined from ${cssPath} */\n${cssContent}\n</style>\n</head>`);
+          }
+        }
+
+        // Extract & inline JS
+        const jsFiles = Object.keys(zipData.files).filter(f => !zipData.files[f].dir && f.endsWith('.js'));
+        for (const jsPath of jsFiles) {
+          const jsContent = await zipData.files[jsPath].async('string');
+          if (jsContent && !extractedHtml.includes(jsContent.substring(0, 30))) {
+            extractedHtml = extractedHtml.replace('</body>', `<script>\n/* Inlined from ${jsPath} */\n${jsContent}\n</script>\n</body>`);
+          }
+        }
+      }
+
+      if (!extractedHtml.trim()) {
+        showToast('Uploaded file content is empty!', 'error');
+        setIsProcessingZip(false);
+        return;
+      }
+
+      const slug = siteTitle.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      setGeneratedApp({
+        title: siteTitle,
+        description: `Uploaded from file archive (${file.name}) to OneHost Hosting`,
+        code: extractedHtml,
+        techStack: ['HTML5', 'CSS3', 'JavaScript', 'ZIP Archive'],
+        suggestedDomain: `${slug}.onehost.cloud`
+      });
+
+      showToast(`🎉 Successfully extracted "${file.name}"! Click "Deploy" to launch live.`, 'success');
+    } catch (err) {
+      console.error('File parsing error:', err);
+      showToast('Error reading ZIP file. Please check file format.', 'error');
+    } finally {
+      setIsProcessingZip(false);
+    }
+  };
+
+  // Handle Direct Code Load
+  const handleLoadPastedCode = () => {
+    if (!rawPastedCode.trim()) {
+      showToast('Please paste or write your website HTML code first!', 'error');
+      return;
+    }
+
+    const titleToUse = customSiteTitle.trim() || 'My Custom Website';
+    const slug = titleToUse.toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+    setGeneratedApp({
+      title: titleToUse,
+      description: 'Custom HTML/CSS/JS website code deployed on OneHost Hosting',
+      code: rawPastedCode,
+      techStack: ['Custom HTML5', 'CSS3', 'JavaScript'],
+      suggestedDomain: `${slug}.onehost.cloud`
+    });
+
+    showToast('✨ Loaded custom code into Live Sandbox Preview! Click "Deploy" to publish.', 'success');
+  };
   const [previewViewMode, setPreviewViewMode] = useState<'preview' | 'code'>('preview');
   const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
@@ -132,6 +262,8 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
   const [selectedSiteForDomain, setSelectedSiteForDomain] = useState<{ id: string; title: string; currentDomain: string } | null>(null);
   const [inputCustomDomain, setInputCustomDomain] = useState('');
   const [isVerifyingDns, setIsVerifyingDns] = useState(false);
+  const [activeRegistrarGuide, setActiveRegistrarGuide] = useState<'godaddy' | 'hostinger' | 'namecheap' | 'cloudflare' | 'bigrock'>('godaddy');
+  const [dnsConnectionMethod, setDnsConnectionMethod] = useState<'dns' | 'nameservers'>('dns');
 
   const handleVerifyAndConnectDomain = async () => {
     if (!inputCustomDomain.trim() || !selectedSiteForDomain) {
@@ -505,7 +637,13 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
       return;
     }
 
-    const creditCost = selectedModel === 'gemini-deep-research' ? 3 : selectedModel.includes('pro') ? 2 : 1;
+    let creditCost = 500;
+    if (selectedModel === 'gemini-deep-research') creditCost = 1500;
+    else if (selectedModel === 'claude-3.5-sonnet') creditCost = 1200;
+    else if (selectedModel === 'gemini-2.5-pro') creditCost = 1000;
+    else if (selectedModel === 'deepseek-v3') creditCost = 800;
+    else if (selectedModel === 'gemini-3.6-flash') creditCost = 750;
+    else creditCost = 500;
     if (!checkAndDeduct(creditCost)) return;
 
     setIsBuildingApp(true);
@@ -563,10 +701,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
   // Handler for GitHub Export / Push
   const handlePushToGithub = async () => {
     const targetApp = generatedApp || {
-      title: activeApp ? activeApp.title : 'My AI Web App',
-      description: activeApp ? activeApp.description : 'AI Generated Application by OneHost',
-      code: activeApp ? activeApp.code : '',
-      techStack: (activeApp && activeApp.techStack) || ['HTML5', 'Tailwind CSS', 'JavaScript']
+      title: 'My AI Web App',
+      description: 'AI Generated Application by OneHost',
+      code: '',
+      techStack: ['HTML5', 'Tailwind CSS', 'JavaScript']
     };
 
     if (!targetApp || !targetApp.code) {
@@ -710,7 +848,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
   // Handler for Deep Research
   const handleRunDeepResearch = async () => {
-    if (!checkAndDeduct(3)) return;
+    if (!checkAndDeduct(1500)) return;
     setIsResearching(true);
     showToast(`Deep Research Agent (${selectedModel}) analyzing architecture...`, 'info');
     const res = await runAiAgentTask(
@@ -731,7 +869,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
   // Handler for Vision UI
   const handleRunVisionUi = async () => {
-    if (!checkAndDeduct(1)) return;
+    if (!checkAndDeduct(500)) return;
     setIsVisionBuilding(true);
     showToast(`Vision Agent (${selectedModel}) compiling UI component...`, 'info');
     const res = await generateAiApp({
@@ -750,7 +888,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
   // Handler for Voice Architect
   const handleRunVoiceArchitect = async () => {
-    if (!checkAndDeduct(2)) return;
+    if (!checkAndDeduct(750)) return;
     setIsVoiceGenerating(true);
     showToast(`Voice Agent (${selectedModel}) working...`, 'info');
     const res = await runAiAgentTask(
@@ -775,7 +913,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
       showToast('Paste code snippet to debug!', 'error');
       return;
     }
-    if (!checkAndDeduct(1)) return;
+    if (!checkAndDeduct(400)) return;
     setIsDebugging(true);
     showToast(`Code Debugger (${selectedModel}) scanning syntax & memory...`, 'info');
     const res = await runAiAgentTask('code_fix', { language: codeLanguage, code: codeInput }, selectedModel, userApiKey || undefined);
@@ -788,7 +926,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
   // Handler for DB Architect
   const handleRunDbArchitect = async () => {
-    if (!checkAndDeduct(1)) return;
+    if (!checkAndDeduct(600)) return;
     setIsGeneratingDb(true);
     showToast(`Database Architect (${selectedModel}) generating DDL...`, 'info');
     const res = await runAiAgentTask('db_gen', { prompt: dbPrompt, dbType }, selectedModel, userApiKey || undefined);
@@ -801,7 +939,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
   // Handler for SEO Generator
   const handleRunSeoGen = async () => {
-    if (!checkAndDeduct(1)) return;
+    if (!checkAndDeduct(350)) return;
     setIsGeneratingSeo(true);
     showToast(`SEO Agent (${selectedModel}) analyzing domain & keywords...`, 'info');
     const res = await runAiAgentTask('seo_gen', { domain: seoDomain, niche: seoNiche }, selectedModel, userApiKey || undefined);
@@ -814,7 +952,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
   // Handler for Brand Studio
   const handleRunBrandGen = async () => {
-    if (!checkAndDeduct(1)) return;
+    if (!checkAndDeduct(400)) return;
     setIsGeneratingBrand(true);
     showToast(`Brand Studio (${selectedModel}) designing SVG logo...`, 'info');
     const res = await runAiAgentTask('brand_gen', { brandName, vibe: brandVibe }, selectedModel, userApiKey || undefined);
@@ -827,7 +965,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
   // Handler for Security Audit
   const handleRunSecurityAudit = async () => {
-    if (!checkAndDeduct(1)) return;
+    if (!checkAndDeduct(450)) return;
     setIsAuditing(true);
     showToast(`Security Inspector (${selectedModel}) auditing target...`, 'info');
     const res = await runAiAgentTask('security_audit', { target: secTarget }, selectedModel, userApiKey || undefined);
@@ -877,17 +1015,50 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
               onChange={(e: any) => setSelectedModel(e.target.value)}
               className="bg-transparent text-slate-200 font-semibold focus:outline-none text-xs cursor-pointer pr-1"
             >
-              <option value="gemini-3.6-flash" className="bg-slate-900 text-white">Gemini 3.6 Flash (Latest Ultra Fast)</option>
-              <option value="gemini-3.5-flash-lite" className="bg-slate-900 text-white">Gemini 3.5 Flash Lite (High Efficiency)</option>
-              <option value="gemini-3.5-flash" className="bg-slate-900 text-white">Gemini 3.5 Flash (Balanced Powerful)</option>
-              <option value="gemini-3.1-pro-preview" className="bg-slate-900 text-white">Gemini 3.1 Pro Preview (Complex Logic)</option>
-              <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-white">Gemini 3.1 Flash Lite (Fast Lightweight)</option>
-              <option value="gemini-3-flash-preview" className="bg-slate-900 text-white">Gemini 3 Flash Preview (Preview Model)</option>
-              <option value="gemini-2.5-pro" className="bg-slate-900 text-white">Gemini 2.5 Pro Vibe Coder (2 Credits)</option>
-              <option value="gemini-2.5-flash" className="bg-slate-900 text-white">Gemini 2.5 Flash (1 Credit)</option>
-              <option value="gemini-deep-research" className="bg-slate-900 text-white">Gemini Deep Research Agent (3 Credits)</option>
+              <option value="grok-4.6-high-fast" className="bg-slate-900 text-amber-300">⚡ Cursor Grok 4.6 High Fast (NEW) (300 Credits)</option>
+              <option value="composer-2.5-fast" className="bg-slate-900 text-purple-300">🚀 Composer 2.5 Fast (250 Credits)</option>
+              <option value="sonnet-5-high" className="bg-slate-900 text-white">✨ Sonnet 5 High (500 Credits)</option>
+              <option value="opus-5-high" className="bg-slate-900 text-white">🧠 Opus 5 High (800 Credits)</option>
+              <option value="gpt-5.6-sol" className="bg-slate-900 text-cyan-300">🌐 GPT-5.6 Sol Medium (400 Credits)</option>
+              <option value="gpt-5.6-terra" className="bg-slate-900 text-emerald-300">🌱 GPT-5.6 Terra Medium (350 Credits)</option>
+              <option value="fable-5-high" className="bg-slate-900 text-pink-300">🎨 Fable 5 High (450 Credits)</option>
+              <option value="grok-4.5-high" className="bg-slate-900 text-amber-400">🔥 Cursor Grok 4.5 High (300 Credits)</option>
+              <option value="gemini-2.5-pro" className="bg-slate-900 text-white">Gemini 2.5 Pro Vibe Coder (1,000 Credits)</option>
+              <option value="gemini-2.5-flash" className="bg-slate-900 text-white">Gemini 2.5 Flash Ultra Coder (500 Credits)</option>
+              <option value="gemini-deep-research" className="bg-slate-900 text-white">Gemini Deep Research Agent (1,500 Credits)</option>
             </select>
           </div>
+
+          {/* Connect Domain Shortcut Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const siteToUse = (deployedWebsitesHistory && deployedWebsitesHistory[0]) || {
+                id: 'dep-new-domain',
+                title: generatedApp ? generatedApp.title : 'My New Website',
+                currentDomain: 'mywebsite.onehost.cloud'
+              };
+              setSelectedSiteForDomain(siteToUse);
+              setInputCustomDomain('');
+              setIsCustomDomainModalOpen(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-900/90 to-indigo-900/90 border border-purple-500/50 hover:border-purple-400 text-purple-200 hover:text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-purple-900/20 transition-all cursor-pointer"
+            title="Connect External Domain from GoDaddy, Hostinger, Namecheap, Cloudflare"
+          >
+            <Globe className="w-4 h-4 text-purple-400" />
+            <span>Connect Domain</span>
+          </button>
+
+          {/* Buy Domain Button */}
+          <button
+            type="button"
+            onClick={() => setCurrentView('domains')}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-900/90 to-teal-900/90 border border-emerald-500/50 hover:border-emerald-400 text-emerald-200 hover:text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-emerald-900/20 transition-all cursor-pointer"
+            title="Search & Buy New Domain Name (.in, .com, .ai, .tech)"
+          >
+            <ShoppingCart className="w-4 h-4 text-emerald-400" />
+            <span>Buy Domain</span>
+          </button>
 
           {/* AI Credits Widget */}
           <div className="flex items-center gap-2 bg-gradient-to-r from-purple-950/80 to-slate-950 border border-purple-500/40 rounded-xl px-3.5 py-2">
@@ -974,117 +1145,252 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                 </div>
               </div>
 
-              {/* PROMPT TEXTAREA & DUAL BUILD BUTTONS WITH GEMINI AGENT IN BETWEEN */}
+              {/* 3 CREATION MODE TABS: AI AGENT BUILDER | ZIP FILE UPLOAD | PASTE RAW CODE */}
               <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  {/* LEFT: LABEL */}
-                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-200 uppercase tracking-wider">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>Describe Your Website or SaaS App:</span>
-                  </div>
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-2xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode('ai')}
+                    className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                      creationMode === 'ai'
+                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>🤖 AI Builder</span>
+                  </button>
 
-                  {/* RIGHT: COMPACT GEMINI MODEL SELECTOR */}
-                  <div className="flex items-center gap-1 bg-slate-950 border border-purple-500/50 rounded-lg px-2 py-0.5 text-xs shadow-sm self-start sm:self-auto">
-                    <Cpu className="w-3 h-3 text-purple-400 shrink-0" />
-                    <select
-                      value={selectedModel}
-                      onChange={(e: any) => setSelectedModel(e.target.value)}
-                      className="bg-transparent text-purple-200 font-bold focus:outline-none text-[11px] cursor-pointer pr-1 truncate max-w-[170px]"
-                    >
-                      <option value="gemini-3.6-flash" className="bg-slate-900 text-white">Gemini 3.6 Flash</option>
-                      <option value="gemini-3.5-flash-lite" className="bg-slate-900 text-white">Gemini 3.5 Flash Lite</option>
-                      <option value="gemini-3.5-flash" className="bg-slate-900 text-white">Gemini 3.5 Flash</option>
-                      <option value="gemini-3.1-pro-preview" className="bg-slate-900 text-white">Gemini 3.1 Pro Preview</option>
-                      <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-white">Gemini 3.1 Flash Lite</option>
-                      <option value="gemini-3-flash-preview" className="bg-slate-900 text-white">Gemini 3 Flash Preview</option>
-                      <option value="gemini-2.5-pro" className="bg-slate-900 text-white">Gemini 2.5 Pro Vibe Coder</option>
-                      <option value="gemini-2.5-flash" className="bg-slate-900 text-white">Gemini 2.5 Flash</option>
-                      <option value="gemini-deep-research" className="bg-slate-900 text-white">Gemini Deep Research</option>
-                    </select>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode('zip')}
+                    className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                      creationMode === 'zip'
+                        ? 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white shadow-lg shadow-cyan-600/30'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <FolderArchive className="w-3.5 h-3.5 text-cyan-300" />
+                    <span>📂 Upload ZIP</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode('code')}
+                    className={`flex-1 py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                      creationMode === 'code'
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/30'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Code className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>⚡ Paste Code</span>
+                  </button>
                 </div>
 
-                {/* ANIMATED ROTATING BLUE LIGHT BORDER BOX */}
-                <div className="animated-blue-light-box">
-                  <div className="animated-blue-light-inner relative">
-                    <textarea
-                      value={appPrompt}
-                      onChange={(e) => setAppPrompt(e.target.value)}
-                      placeholder="Example: Create a full mechanical keyboard online shop with interactive shopping cart, quantity controls, filter by price, dark cyberpunk theme, and Razorpay UPI payment checkout..."
-                      rows={5}
-                      className="w-full px-4 py-3 bg-slate-950 text-slate-100 placeholder-slate-500 focus:outline-none rounded-2xl text-xs font-medium transition-all leading-relaxed"
+                {/* MODE 1: AI AGENT BUILDER */}
+                {creationMode === 'ai' && (
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-200 uppercase tracking-wider">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>Describe Your Website or SaaS App:</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 bg-slate-950 border border-purple-500/50 rounded-lg px-2 py-0.5 text-xs shadow-sm self-start sm:self-auto">
+                        <Cpu className="w-3 h-3 text-purple-400 shrink-0" />
+                        <select
+                          value={selectedModel}
+                          onChange={(e: any) => setSelectedModel(e.target.value)}
+                          className="bg-transparent text-purple-200 font-bold focus:outline-none text-[11px] cursor-pointer pr-1 truncate max-w-[170px]"
+                        >
+                          <option value="gemini-3.6-flash" className="bg-slate-900 text-white">Gemini 3.6 Flash</option>
+                          <option value="gemini-3.5-flash-lite" className="bg-slate-900 text-white">Gemini 3.5 Flash Lite</option>
+                          <option value="gemini-3.5-flash" className="bg-slate-900 text-white">Gemini 3.5 Flash</option>
+                          <option value="gemini-3.1-pro-preview" className="bg-slate-900 text-white">Gemini 3.1 Pro Preview</option>
+                          <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-white">Gemini 3.1 Flash Lite</option>
+                          <option value="gemini-3-flash-preview" className="bg-slate-900 text-white">Gemini 3 Flash Preview</option>
+                          <option value="gemini-2.5-pro" className="bg-slate-900 text-white">Gemini 2.5 Pro Vibe Coder</option>
+                          <option value="gemini-2.5-flash" className="bg-slate-900 text-white">Gemini 2.5 Flash</option>
+                          <option value="gemini-deep-research" className="bg-slate-900 text-white">Gemini Deep Research</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="animated-blue-light-box">
+                      <div className="animated-blue-light-inner relative">
+                        <textarea
+                          value={appPrompt}
+                          onChange={(e) => setAppPrompt(e.target.value)}
+                          placeholder="Example: Create a full mechanical keyboard online shop with interactive shopping cart, quantity controls, filter by price, dark cyberpunk theme, and Razorpay UPI payment checkout..."
+                          rows={5}
+                          className="w-full px-4 py-3 bg-slate-950 text-slate-100 placeholder-slate-500 focus:outline-none rounded-2xl text-xs font-medium transition-all leading-relaxed"
+                        />
+                        <div className="absolute bottom-2.5 right-3 flex items-center gap-2 text-cyan-400/80 text-[10px] font-mono select-none">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+                          <span>{appPrompt.length} chars</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-row items-center justify-between gap-1.5 pt-1 w-full overflow-x-auto pb-1">
+                      <button
+                        type="button"
+                        onClick={(e) => handleGenerateApp('website', e)}
+                        disabled={isBuildingApp}
+                        className="flex-1 py-2 px-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-extrabold text-[11px] tracking-tight shadow-md shadow-cyan-600/20 flex items-center justify-center gap-1 transition-all transform hover:scale-[1.01] active:scale-[0.99] border border-cyan-400/40 disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {isBuildingApp ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin text-cyan-200" />
+                            <span>Building...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Globe className="w-3 h-3 text-amber-300 shrink-0" />
+                            <span>🌐 Build Website</span>
+                          </>
+                        )}
+                      </button>
+
+                      <div className="relative flex-1 min-w-[120px]">
+                        <select
+                          value={activeTab}
+                          onChange={(e) => setActiveTab(e.target.value as any)}
+                          className="w-full py-2 px-2 rounded-xl bg-slate-900 border border-purple-500/60 hover:border-purple-400 text-purple-200 hover:text-white font-extrabold text-[10px] shadow-sm cursor-pointer focus:outline-none transition-all appearance-none pr-5 text-center truncate"
+                        >
+                          <option value="builder" className="bg-slate-900 text-white py-2">🤖 App & Website Coder</option>
+                          <option value="research" className="bg-slate-900 text-white py-2">📚 Deep Research</option>
+                          <option value="vision" className="bg-slate-900 text-white py-2">👁️ Vision UI</option>
+                          <option value="voice" className="bg-slate-900 text-white py-2">🎙️ Voice Architect</option>
+                          <option value="code" className="bg-slate-900 text-white py-2">🔧 Code Debugger</option>
+                          <option value="db" className="bg-slate-900 text-white py-2">🗄️ Database Architect</option>
+                          <option value="seo" className="bg-slate-900 text-white py-2">🔍 SEO & Content</option>
+                          <option value="brand" className="bg-slate-900 text-white py-2">🎨 Brand Studio</option>
+                          <option value="security" className="bg-slate-900 text-white py-2">🛡️ Security Auditor</option>
+                        </select>
+                        <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-purple-400 font-bold text-[9px]">
+                          ▼
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => handleGenerateApp('app', e)}
+                        disabled={isBuildingApp}
+                        className="flex-1 py-2 px-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] tracking-tight shadow-md shadow-purple-600/20 flex items-center justify-center gap-1 transition-all transform hover:scale-[1.01] active:scale-[0.99] border border-purple-400/40 disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {isBuildingApp ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin text-purple-200" />
+                            <span>Building...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
+                            <span>📱 Build SaaS App</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODE 2: UPLOAD ZIP ARCHIVE OR HTML FILE */}
+                {creationMode === 'zip' && (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-cyan-500/40 space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-cyan-300">Website / App Title (Optional)</label>
+                      <input
+                        type="text"
+                        value={customSiteTitle}
+                        onChange={(e) => setCustomSiteTitle(e.target.value)}
+                        placeholder="e.g. My Business Agency Website"
+                        className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-medium"
+                      />
+                    </div>
+
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          handleFileUpload(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      className="border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-950/40 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-2 group"
+                    >
+                      <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto border border-cyan-500/30 group-hover:scale-110 transition-transform">
+                        {isProcessingZip ? <RefreshCw className="w-6 h-6 animate-spin" /> : <Upload className="w-6 h-6" />}
+                      </div>
+                      <div className="text-xs font-extrabold text-white">
+                        {isProcessingZip ? 'Processing ZIP File...' : 'Drag & Drop .ZIP or .HTML File Here'}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Select any <b>.zip</b> archive containing your <code>index.html</code> website files or a direct <b>.html</b> file
+                      </div>
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs inline-flex items-center gap-1.5 shadow-md shadow-cyan-600/30"
+                      >
+                        <FolderArchive className="w-4 h-4" />
+                        <span>Browse ZIP File</span>
+                      </button>
+                    </div>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".zip,.html,.htm"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleFileUpload(e.target.files[0]);
+                        }
+                      }}
+                      className="hidden"
                     />
-                    <div className="absolute bottom-2.5 right-3 flex items-center gap-2 text-cyan-400/80 text-[10px] font-mono select-none">
-                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
-                      <span>{appPrompt.length} chars</span>
-                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* 3 CONTROLS IN A SINGLE COMPACT ROW: BUILD WEBSITE | GEMINI AGENT SELECTOR | BUILD APP */}
-                <div className="flex flex-row items-center justify-between gap-1.5 pt-1 w-full overflow-x-auto pb-1">
-                  {/* BUTTON 1: BUILD FULL WEBSITE */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleGenerateApp('website', e)}
-                    disabled={isBuildingApp}
-                    className="flex-1 py-2 px-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-extrabold text-[11px] tracking-tight shadow-md shadow-cyan-600/20 flex items-center justify-center gap-1 transition-all transform hover:scale-[1.01] active:scale-[0.99] border border-cyan-400/40 disabled:opacity-50 whitespace-nowrap"
-                  >
-                    {isBuildingApp ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 animate-spin text-cyan-200" />
-                        <span>Building...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Globe className="w-3 h-3 text-amber-300 shrink-0" />
-                        <span>🌐 Build Website</span>
-                      </>
-                    )}
-                  </button>
+                {/* MODE 3: PASTE CUSTOM HTML CODE */}
+                {creationMode === 'code' && (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/40 space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-emerald-300">Website Name</label>
+                      <input
+                        type="text"
+                        value={customSiteTitle}
+                        onChange={(e) => setCustomSiteTitle(e.target.value)}
+                        placeholder="e.g. Portfolio Website"
+                        className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-medium"
+                      />
+                    </div>
 
-                  {/* GEMINI AGENT SELECTOR BUTTON IN THE MIDDLE */}
-                  <div className="relative flex-1 min-w-[120px]">
-                    <select
-                      value={activeTab}
-                      onChange={(e) => setActiveTab(e.target.value as any)}
-                      className="w-full py-2 px-2 rounded-xl bg-slate-900 border border-purple-500/60 hover:border-purple-400 text-purple-200 hover:text-white font-extrabold text-[10px] shadow-sm cursor-pointer focus:outline-none transition-all appearance-none pr-5 text-center truncate"
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs text-slate-300">
+                        <label className="font-bold text-emerald-300">Paste HTML / CSS / JS Code:</label>
+                        <span className="text-[10px] text-slate-400">Full Custom Code Support</span>
+                      </div>
+                      <textarea
+                        value={rawPastedCode}
+                        onChange={(e) => setRawPastedCode(e.target.value)}
+                        placeholder="<!DOCTYPE html>&#10;<html>&#10;<head><title>My Site</title><script src='https://cdn.tailwindcss.com'></script></head>&#10;<body class='bg-slate-950 text-white p-10'>&#10;  <h1>Hello World! My custom website live on OneHost!</h1>&#10;</body>&#10;</html>"
+                        rows={6}
+                        className="w-full p-3.5 bg-slate-900 border border-slate-800 rounded-xl font-mono text-xs text-emerald-300 focus:outline-none focus:border-emerald-500 resize-none leading-relaxed"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleLoadPastedCode}
+                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all"
                     >
-                      <option value="builder" className="bg-slate-900 text-white py-2">🤖 App & Website Coder</option>
-                      <option value="research" className="bg-slate-900 text-white py-2">📚 Deep Research</option>
-                      <option value="vision" className="bg-slate-900 text-white py-2">👁️ Vision UI</option>
-                      <option value="voice" className="bg-slate-900 text-white py-2">🎙️ Voice Architect</option>
-                      <option value="code" className="bg-slate-900 text-white py-2">🔧 Code Debugger</option>
-                      <option value="db" className="bg-slate-900 text-white py-2">🗄️ Database Architect</option>
-                      <option value="seo" className="bg-slate-900 text-white py-2">🔍 SEO & Content</option>
-                      <option value="brand" className="bg-slate-900 text-white py-2">🎨 Brand Studio</option>
-                      <option value="security" className="bg-slate-900 text-white py-2">🛡️ Security Auditor</option>
-                    </select>
-                    <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-purple-400 font-bold text-[9px]">
-                      ▼
-                    </div>
+                      <Code className="w-4 h-4" />
+                      <span>✨ Load Code into Sandbox & Preview</span>
+                    </button>
                   </div>
-
-                  {/* BUTTON 2: BUILD FULL APP */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleGenerateApp('app', e)}
-                    disabled={isBuildingApp}
-                    className="flex-1 py-2 px-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] tracking-tight shadow-md shadow-purple-600/20 flex items-center justify-center gap-1 transition-all transform hover:scale-[1.01] active:scale-[0.99] border border-purple-400/40 disabled:opacity-50 whitespace-nowrap"
-                  >
-                    {isBuildingApp ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 animate-spin text-purple-200" />
-                        <span>Building...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-3 h-3 text-amber-300 shrink-0" />
-                        <span>📱 Build SaaS App</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                )}
               </div>
 
               {/* VISUAL THEME & STYLE DROPDOWN */}
@@ -1274,7 +1580,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                               srcDoc={activeApp.code}
                               title="Mobile Application Preview"
                               className="w-full h-full border-none bg-slate-950"
-                              sandbox="allow-scripts allow-modals allow-same-origin"
+                              sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-popups allow-downloads"
                             />
                           </div>
 
@@ -1306,7 +1612,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                               srcDoc={activeApp.code}
                               title="Tablet Application Preview"
                               className="w-full h-full border-none bg-slate-950"
-                              sandbox="allow-scripts allow-modals allow-same-origin"
+                              sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-popups allow-downloads"
                             />
                           </div>
 
@@ -1351,7 +1657,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                               srcDoc={activeApp.code}
                               title="Desktop Application Preview"
                               className="w-full h-full border-none bg-slate-950"
-                              sandbox="allow-scripts allow-modals allow-same-origin"
+                              sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-popups allow-downloads"
                             />
                           </div>
                         </div>
@@ -1441,6 +1747,16 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                         >
                           <Globe className="w-3.5 h-3.5 text-purple-400" />
                           <span>Connect Domain</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setCurrentView('domains')}
+                          className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                          title="Search & Buy New Domain"
+                        >
+                          <ShoppingCart className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Buy Domain</span>
                         </button>
 
                         <button
@@ -1554,6 +1870,16 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                         >
                           <Globe className="w-3.5 h-3.5 text-purple-400" />
                           <span>{item.domain && !item.domain.includes('onehost.cloud') ? item.domain : 'Connect Domain'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setCurrentView('domains')}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 transition-all"
+                          title="Search & Buy New Domain"
+                        >
+                          <ShoppingCart className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Buy Domain</span>
                         </button>
 
                         <button
@@ -1903,89 +2229,377 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
       {/* BUY AI CREDITS MONETIZATION MODAL */}
       {isCreditModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 md:p-8 space-y-6 shadow-2xl relative">
-            <button
-              onClick={() => setIsCreditModalOpen(false)}
-              className="absolute top-5 right-5 text-slate-400 hover:text-white"
-            >
-              ✕
-            </button>
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 overflow-y-auto p-3 sm:p-6 flex justify-center items-start">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-5xl w-full my-4 sm:my-8 shadow-2xl overflow-hidden relative">
+            
+            {/* STICKY MODAL HEADER WITH BACK BUTTON */}
+            <div className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 p-4 sm:p-5 flex items-center justify-between gap-2">
+              <button
+                onClick={() => setIsCreditModalOpen(false)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600 text-purple-200 hover:text-white text-xs font-extrabold border border-purple-500/30 transition-all group cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4 text-purple-400 group-hover:-translate-x-1 transition-transform" />
+                <span>← Back to AI Builder</span>
+              </button>
 
-            <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-bold uppercase">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[11px] sm:text-xs font-black uppercase shrink-0">
                 <Zap className="w-4 h-4 text-amber-400" />
-                <span>AI CREDITS MONETIZATION PACKS</span>
+                <span>PLANS & AI CREDITS (2X DOUBLE LIMITS)</span>
               </div>
-              <h3 className="text-2xl font-black text-white">Unlock Full Power of Gemini 2.5 Agents</h3>
-              <p className="text-xs text-slate-400 max-w-md mx-auto">
-                Buy AI Generation Credits to build live web applications, run Deep Research architectures, and deploy custom sites with zero limits.
-              </p>
+
+              <button
+                onClick={() => setIsCreditModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all text-xs font-bold shrink-0 cursor-pointer"
+                title="Close modal"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Pack 1 */}
-              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-purple-500/50 space-y-4 text-center transition-all">
-                <div>
-                  <span className="text-xs font-bold text-slate-400 uppercase">Starter Pack</span>
-                  <h4 className="text-2xl font-black text-white mt-1">50 Credits</h4>
-                  <p className="text-xs text-purple-400 font-bold mt-1">₹299</p>
-                </div>
-                <ul className="text-[11px] text-slate-400 space-y-2 text-left border-t border-slate-800 pt-3">
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> ~50 Web App Builds</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Gemini 2.5 Flash</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> 1-Click Cloud Deploy</li>
-                </ul>
-                <button
-                  onClick={() => handleSelectPack({ name: 'Starter 50 AI Credits', credits: 50, price: 299 })}
-                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-purple-600 text-white font-bold text-xs transition-all"
-                >
-                  Buy Pack
-                </button>
+            <div className="p-5 md:p-8 space-y-6">
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl sm:text-3xl font-black text-white">Choose Your Plan or AI Credit Pack</h3>
+                <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto">
+                  Get <strong className="text-emerald-400 font-bold">DOUBLE the AI Agent capacity</strong> of Cursor & v0! Power AI website builds, Deep Research, bug fixing, and live server hosting.
+                </p>
               </div>
 
-              {/* Pack 2 - Featured */}
-              <div className="p-5 rounded-2xl bg-slate-950 border-2 border-purple-500 space-y-4 text-center relative shadow-lg shadow-purple-600/20 transition-all">
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-extrabold uppercase tracking-wider">
-                  MOST POPULAR
-                </span>
-                <div>
-                  <span className="text-xs font-bold text-purple-300 uppercase">Pro Vibe Builder</span>
-                  <h4 className="text-2xl font-black text-white mt-1">250 Credits</h4>
-                  <p className="text-xs text-purple-400 font-bold mt-1">₹799</p>
+              {/* CREDIT USAGE BREAKDOWN & FREE LIMITED TIME BONUSES */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-purple-500/40 space-y-3 text-xs shadow-xl">
+                {/* LIMITED TIME FREE INCLUSIONS BANNER */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-950/80 via-teal-900/40 to-slate-900 border border-emerald-500/40 flex flex-col md:flex-row items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-black text-[10px] uppercase tracking-wider shrink-0 animate-pulse">
+                      ⚡ LIMITED TIME INCLUDED FREE
+                    </span>
+                    <span className="text-emerald-200 text-xs font-bold">
+                      All Plans & Credit Packs Include Zero-Cost Publishing Infrastructure:
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-extrabold text-white">
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-900/60 border border-emerald-500/40 text-emerald-300 flex items-center gap-1">
+                      🌐 Free Subdomain
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 flex items-center gap-1">
+                      ☁️ Free NVMe Hosting
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-purple-900/60 border border-purple-500/40 text-purple-300 flex items-center gap-1">
+                      🚀 1-Click Deploy & SSL
+                    </span>
+                  </div>
                 </div>
-                <ul className="text-[11px] text-slate-300 space-y-2 text-left border-t border-slate-800 pt-3">
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> ~250 Web App Builds</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Gemini 2.5 Pro Vibe Coder</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Deep Research Agent</li>
-                </ul>
-                <button
-                  onClick={() => handleSelectPack({ name: 'Pro 250 AI Credits', credits: 250, price: 799 })}
-                  className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-600/30 transition-all"
-                >
-                  Buy Pro Pack
-                </button>
+
+                <div className="flex items-center justify-between text-slate-400 font-bold border-b border-slate-800 pb-2">
+                  <span className="flex items-center gap-1.5 text-purple-300">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>How AI Credits Work (Rate Chart & Capacity):</span>
+                  </span>
+                  <span className="text-emerald-400 font-extrabold text-[11px]">✓ Rate = 2x Double Credits</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-300 pt-1">
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px] font-semibold">Website Build (Flash)</span>
+                    <strong className="text-amber-300 font-extrabold text-xs">300 Credits</strong> / build
+                    <span className="text-[9px] text-slate-400 block mt-0.5">Build ~3 Full Websites</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px] font-semibold">Web App / SaaS (Pro Vibe)</span>
+                    <strong className="text-purple-300 font-extrabold text-xs">500 Credits</strong> / build
+                    <span className="text-[9px] text-purple-300 block mt-0.5">Build ~2 Full Web Apps</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px] font-semibold">Deep Research Agent</span>
+                    <strong className="text-cyan-300 font-extrabold text-xs">500 Credits</strong> / query
+                    <span className="text-[9px] text-cyan-300 block mt-0.5">Deep System Architecture</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px] font-semibold">Bug Fix / DB Endpoints</span>
+                    <strong className="text-emerald-300 font-extrabold text-xs">200 Credits</strong> / action
+                    <span className="text-[9px] text-emerald-400 block mt-0.5">Refactoring & Schema</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Pack 3 */}
-              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-purple-500/50 space-y-4 text-center transition-all">
-                <div>
-                  <span className="text-xs font-bold text-slate-400 uppercase">Enterprise Ultra</span>
-                  <h4 className="text-2xl font-black text-white mt-1">1000 Credits</h4>
-                  <p className="text-xs text-purple-400 font-bold mt-1">₹1,999</p>
+              {/* MONTHLY SUBSCRIPTION PLANS (2X CURSOR LIMITS) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <h4 className="text-sm font-black text-white flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    <span>Monthly Subscription Tiers (2X DOUBLE Agent Limits)</span>
+                  </h4>
+                  <span className="text-[10px] text-emerald-400 font-extrabold">200% Capacity + Free Subdomain & Hosting</span>
                 </div>
-                <ul className="text-[11px] text-slate-400 space-y-2 text-left border-t border-slate-800 pt-3">
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> ~1000 Web App Builds</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> All Gemini AI Agents</li>
-                  <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Priority Server Compute</li>
-                </ul>
-                <button
-                  onClick={() => handleSelectPack({ name: 'Enterprise 1000 AI Credits', credits: 1000, price: 1999 })}
-                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-purple-600 text-white font-bold text-xs transition-all"
-                >
-                  Buy Pack
-                </button>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Pro $20 */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-purple-500/50 space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-black uppercase">
+                        INDIVIDUAL PRO
+                      </span>
+                      <div>
+                        <h4 className="text-2xl font-black text-amber-300">₹1,699 <span className="text-xs text-slate-400 font-normal">($20/mo)</span></h4>
+                        <span className="text-[10px] text-emerald-400 font-extrabold block">3,400 AI Credits / Month (2x Rate)</span>
+                      </div>
+                      <ul className="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-2 text-left">
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> <strong>2x Double Rate Credits</strong></li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> <strong>Free Custom Subdomain</strong></li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> <strong>Free Cloud Hosting & Deploy</strong></li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> MCPs, Skills & Webhooks</li>
+                      </ul>
+                    </div>
+                    <button
+                      onClick={() => handleSelectPack({ name: 'Individual Pro Plan ($20/mo)', credits: 3400, price: 1699 })}
+                      className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs transition-all cursor-pointer"
+                    >
+                      Subscribe Pro (₹1,699/mo)
+                    </button>
+                  </div>
+
+                  {/* Pro+ $60 */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border-2 border-amber-500/80 space-y-3 flex flex-col justify-between relative bg-gradient-to-b from-amber-950/20 to-slate-950">
+                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[9px] font-black uppercase">
+                      LIMITED TIME BONUS
+                    </span>
+                    <div className="space-y-2 pt-1">
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase">
+                        INDIVIDUAL PRO+
+                      </span>
+                      <div>
+                        <h4 className="text-2xl font-black text-amber-300">₹4,999 <span className="text-xs text-slate-400 font-normal">($60/mo)</span></h4>
+                        <span className="text-[10px] text-emerald-400 font-extrabold block">10,000 AI Credits / Month (2x Rate)</span>
+                      </div>
+                      <ul className="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-2 text-left">
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> <strong>2x Double Rate Credits</strong></li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> <strong>Free Subdomain & NVMe Hosting</strong></li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> <strong>Instant 1-Click Deployment</strong></li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Gemini Deep Research Coder</li>
+                      </ul>
+                    </div>
+                    <button
+                      onClick={() => handleSelectPack({ name: 'Individual Pro+ Plan ($60/mo)', credits: 10000, price: 4999 })}
+                      className="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xs transition-all cursor-pointer"
+                    >
+                      Subscribe Pro+ (₹4,999/mo)
+                    </button>
+                  </div>
+
+                  {/* Ultra $200 */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-cyan-500/50 space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-black uppercase">
+                        INDIVIDUAL ULTRA
+                      </span>
+                      <div>
+                        <h4 className="text-2xl font-black text-amber-300">₹16,999 <span className="text-xs text-slate-400 font-normal">($200/mo)</span></h4>
+                        <span className="text-[10px] text-emerald-400 font-extrabold block">34,000 AI Credits (2x Rate)</span>
+                      </div>
+                      <ul className="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-2 text-left">
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> <strong>2x Double Rate Credits</strong></li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> <strong>Free Subdomain, Hosting & SSL</strong></li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> Priority High-Speed Queue</li>
+                        <li className="flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> Bugbot AI Code Auditor</li>
+                      </ul>
+                    </div>
+                    <button
+                      onClick={() => handleSelectPack({ name: 'Individual Ultra Plan ($200/mo)', credits: 34000, price: 16999 })}
+                      className="w-full py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs transition-all cursor-pointer"
+                    >
+                      Subscribe Ultra (₹16,999/mo)
+                    </button>
+                  </div>
+                </div>
               </div>
+
+              {/* INSTANT TOP-UP CREDIT PACKS (LIFETIME VALIDITY) */}
+              <div className="space-y-4 border-t border-slate-800 pt-4">
+                {/* URGENCY COUNTDOWN OFFER BANNER */}
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-purple-600/20 to-pink-500/20 border border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 animate-pulse">
+                      <Zap className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-amber-300 flex items-center gap-1.5 justify-center sm:justify-start">
+                        <span>⚡ LIMITED TIME OFFER: 2X CREDITS + FREE SUBDOMAIN, HOSTING & DEPLOY!</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Get 1,000 AI Credits for <span className="line-through text-slate-400">₹1,499</span> <span className="text-emerald-400 font-extrabold text-xs">₹499 Only!</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="px-3.5 py-1.5 rounded-xl bg-slate-900/90 border border-amber-500/30 flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Ends In:</span>
+                    <span className="text-sm font-mono font-black text-amber-400">
+                      {String(timeLeft.minutes).padStart(2, '0')}:{String(timeLeft.seconds).padStart(2, '0')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <h4 className="text-sm font-black text-white flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    <span>Instant Credit Top-Up Packs (2x Double Rate • Lifetime Validity)</span>
+                  </h4>
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    Free Subdomain + Hosting Included
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Pack 1: Starter Pack ₹499 */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/50 hover:border-amber-400 space-y-3 text-center transition-all flex flex-col justify-between shadow-lg ring-1 ring-amber-500/20">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase">
+                          STARTER PACK
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-extrabold">
+                          2X DOUBLE CREDITS
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="text-2xl font-black text-amber-300">1,000 Credits</h4>
+                        <div className="flex items-center justify-center gap-2 mt-1">
+                          <span className="text-xs text-slate-500 line-through font-bold">₹1,499</span>
+                          <span className="text-xl font-black text-emerald-400">₹499</span>
+                        </div>
+                        <span className="text-[10px] text-emerald-400 font-extrabold block mt-1">Build ~3 Full Websites or ~2 Web Apps</span>
+                        <div className="mt-2 text-[10px] text-slate-300 space-y-0.5 text-left border-t border-slate-800/80 pt-2">
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free Subdomain Included</div>
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free Cloud Hosting</div>
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free 1-Click Deployment</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleSelectPack({ name: 'Starter 1,000 AI Credits Pack', credits: 1000, price: 499 })}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black text-xs transition-all shadow-md cursor-pointer"
+                    >
+                      Buy Starter Pack (₹499)
+                    </button>
+                  </div>
+
+                  {/* Pack 2: Pro Pack ₹999 */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-purple-500/50 space-y-3 text-center transition-all flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-black uppercase">
+                        PRO VIBE BUILDER
+                      </span>
+                      <div>
+                        <h4 className="text-2xl font-black text-amber-300">2,000 Credits</h4>
+                        <div className="text-xl font-black text-purple-300 mt-1">₹999</div>
+                        <span className="text-[10px] text-emerald-400 font-extrabold block mt-1">Build ~6 Full Websites or ~4 Web Apps</span>
+                        <div className="mt-2 text-[10px] text-slate-300 space-y-0.5 text-left border-t border-slate-800/80 pt-2">
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free Subdomain Included</div>
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free Cloud Hosting</div>
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free 1-Click Deployment</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleSelectPack({ name: 'Pro 2,000 AI Credits Pack', credits: 2000, price: 999 })}
+                      className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs transition-all cursor-pointer"
+                    >
+                      Buy Pro Pack (₹999)
+                    </button>
+                  </div>
+
+                  {/* Pack 3: Agency Pack ₹2,499 */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-cyan-500/50 space-y-3 text-center transition-all flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-black uppercase">
+                        AGENCY ULTRA
+                      </span>
+                      <div>
+                        <h4 className="text-2xl font-black text-amber-300">5,000 Credits</h4>
+                        <div className="text-xl font-black text-cyan-400 mt-1">₹2,499</div>
+                        <span className="text-[10px] text-emerald-400 font-extrabold block mt-1">Build ~16 Full Websites or ~10 Web Apps</span>
+                        <div className="mt-2 text-[10px] text-slate-300 space-y-0.5 text-left border-t border-slate-800/80 pt-2">
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free Subdomain Included</div>
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free Cloud Hosting</div>
+                          <div className="flex items-center gap-1 text-emerald-300 font-semibold"><CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" /> Free 1-Click Deployment</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleSelectPack({ name: 'Agency 5,000 AI Credits Pack', credits: 5000, price: 2499 })}
+                      className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs transition-all cursor-pointer"
+                    >
+                      Buy Agency Pack (₹2,499)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* WHAT ALL IS INCLUDED SHOWCASE GRID */}
+              <div className="mt-6 p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                <h4 className="text-xs font-black uppercase text-amber-400 tracking-wider flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>🎁 What All Is Included Free In Your Account Platform</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs text-slate-300">
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                    <span className="text-amber-400 font-bold">🤖</span>
+                    <div>
+                      <div className="font-bold text-white">Multi-Engine AI Models</div>
+                      <div className="text-[11px] text-slate-400">Cursor AI, Claude 3.5, GPT-4o & Gemini 2.5 Pro</div>
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                    <span className="text-emerald-400 font-bold">⚡</span>
+                    <div>
+                      <div className="font-bold text-white">Ultra-Fast High-Speed Hosting</div>
+                      <div className="text-[11px] text-slate-400">NVMe SSDs, CDN, Unlimited Bandwidth</div>
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                    <span className="text-cyan-400 font-bold">🔒</span>
+                    <div>
+                      <div className="font-bold text-white">Free SSL & Custom Domain</div>
+                      <div className="text-[11px] text-slate-400">Connect `.com`, `.in`, `.ai` with 1-click HTTPS</div>
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                    <span className="text-purple-400 font-bold">📦</span>
+                    <div>
+                      <div className="font-bold text-white">1-Click Source Code & GitHub</div>
+                      <div className="text-[11px] text-slate-400">Full HTML/JS Code Download & GitHub Repo Sync</div>
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                    <span className="text-pink-400 font-bold">⚙️</span>
+                    <div>
+                      <div className="font-bold text-white">n8n Automation Engine</div>
+                      <div className="text-[11px] text-slate-400">WhatsApp Lead Bots, CRM & Auto-Responders</div>
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-start gap-2">
+                    <span className="text-indigo-400 font-bold">💸</span>
+                    <div>
+                      <div className="font-bold text-white">Invite & Earn Cash Rewards</div>
+                      <div className="text-[11px] text-slate-400">Earn up to ₹10,000 Cash directly in Bank/UPI</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* MODAL FOOTER WITH SECONDARY BACK BUTTON */}
+            <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+              <button
+                onClick={() => setIsCreditModalOpen(false)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4 text-purple-400" />
+                <span>← Back to AI Builder</span>
+              </button>
+
+              <span className="text-xs text-slate-400">100% Instant Credit Activation</span>
             </div>
           </div>
         </div>
@@ -2133,8 +2747,8 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                 <button
                   type="button"
                   onClick={() => {
-                    const codeToDownload = generatedApp ? generatedApp.code : activeApp ? activeApp.code : '';
-                    const titleToDownload = generatedApp ? generatedApp.title : activeApp ? activeApp.title : 'website';
+                    const codeToDownload = generatedApp ? generatedApp.code : '';
+                    const titleToDownload = generatedApp ? generatedApp.title : 'website';
                     if (codeToDownload) {
                       downloadHtmlFile(codeToDownload, titleToDownload);
                     }
@@ -2224,7 +2838,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                     srcDoc={generatedApp.code}
                     title="Fullscreen Mobile Preview"
                     className="w-full h-full border-none bg-slate-950"
-                    sandbox="allow-scripts allow-modals allow-same-origin"
+                    sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-popups allow-downloads"
                   />
                 </div>
 
@@ -2243,7 +2857,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                     srcDoc={generatedApp.code}
                     title="Fullscreen Tablet Preview"
                     className="w-full h-full border-none bg-slate-950"
-                    sandbox="allow-scripts allow-modals allow-same-origin"
+                    sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-popups allow-downloads"
                   />
                 </div>
 
@@ -2254,7 +2868,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                 srcDoc={generatedApp.code}
                 title="Fullscreen App Preview"
                 className="w-full h-full border-none bg-black"
-                sandbox="allow-scripts allow-modals allow-same-origin"
+                sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-popups allow-downloads"
               />
             )}
           </div>
@@ -2356,6 +2970,11 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
             setIsRazorpayOpen(false);
             setSelectedCreditPack(null);
           }}
+          onBack={() => {
+            setIsRazorpayOpen(false);
+            setSelectedCreditPack(null);
+            setIsCreditModalOpen(true);
+          }}
           subtotal={selectedCreditPack.price}
           discount={0}
           items={[{ name: selectedCreditPack.name, price: selectedCreditPack.price, qty: 1 }]}
@@ -2369,8 +2988,8 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
       {/* CUSTOM DOMAIN CONNECTION MODAL */}
       {isCustomDomainModalOpen && selectedSiteForDomain && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 md:p-8 space-y-6 shadow-2xl relative my-auto">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 md:p-8 space-y-6 shadow-2xl relative my-auto">
             <button
               onClick={() => {
                 setIsCustomDomainModalOpen(false);
@@ -2384,18 +3003,38 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
             <div className="space-y-2">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-extrabold uppercase">
                 <Globe className="w-3.5 h-3.5 text-purple-400" />
-                <span>Custom Domain Connection • OneHost Edge CDN</span>
+                <span>Universal Custom Domain Connection • OneHost Edge CDN</span>
               </div>
               <h3 className="text-2xl font-black text-white">Connect Custom Domain (अपना डोमेन जोड़ें)</h3>
               <p className="text-xs text-slate-400">
-                Connect your custom domain (e.g., <code className="text-purple-300 font-mono">www.mybrand.com</code>, <code className="text-purple-300 font-mono">shop.mybusiness.in</code>) bought from GoDaddy, Hostinger, Namecheap, BigRock, or Cloudflare to <strong className="text-slate-200">{selectedSiteForDomain.title}</strong>.
+                Connect your custom domain (e.g. <code className="text-purple-300 font-mono">www.mybrand.com</code>, <code className="text-purple-300 font-mono">shop.mybusiness.in</code>) bought from <strong>GoDaddy, Hostinger, Namecheap, BigRock, or Cloudflare</strong> to <strong className="text-slate-200">{selectedSiteForDomain.title}</strong>.
               </p>
+
+              {/* Buy Domain Quick Action Banner */}
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/30">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-emerald-200">Don't have a domain name yet?</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomDomainModalOpen(false);
+                    setCurrentView('domains');
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  <span>Buy New Domain (.in, .com, .ai)</span>
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  Your Custom Domain Name
+            <div className="space-y-5">
+              {/* Step 1: Input Domain Name */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-300">
+                  Step 1: Enter Your Custom Domain Name
                 </label>
                 <div className="relative">
                   <Globe className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-500" />
@@ -2407,80 +3046,247 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                     className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 font-mono text-xs focus:outline-none focus:border-purple-500 placeholder-slate-600 font-semibold"
                   />
                 </div>
+                <p className="text-[11px] text-slate-500">
+                  Enter with or without <code>www</code> (e.g. <code>mycompany.com</code> or <code>www.mycompany.com</code>)
+                </p>
               </div>
 
-              {/* DNS CONFIGURATION GUIDE FOR CUSTOMERS */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-900 pb-2">
-                  <span className="text-xs font-black text-white flex items-center gap-1.5">
-                    <Shield className="w-4 h-4 text-emerald-400" />
-                    <span>DNS Records to add in GoDaddy / Hostinger / Cloudflare</span>
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono font-bold">🔒 Free Auto SSL</span>
+              {/* Step 2: Choose Connection Method */}
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-300">
+                  Step 2: Choose Connection Method & Copy Records
+                </label>
+
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setDnsConnectionMethod('dns')}
+                    className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                      dnsConnectionMethod === 'dns'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Method A: A + CNAME Records (Recommended)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDnsConnectionMethod('nameservers')}
+                    className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                      dnsConnectionMethod === 'nameservers'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Method B: Name Servers (Cloudflare)</span>
+                  </button>
                 </div>
 
-                <div className="space-y-2 text-xs font-mono">
-                  {/* Record 1 */}
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between text-[11px]">
-                    <div>
-                      <span className="text-purple-400 font-bold mr-2">Type A</span>
-                      <span className="text-slate-300">Host: <code className="text-slate-100 font-bold">@</code></span>
+                {/* Method A Display */}
+                {dnsConnectionMethod === 'dns' ? (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-900 pb-2">
+                      <span className="text-xs font-black text-white flex items-center gap-1.5">
+                        <Shield className="w-4 h-4 text-emerald-400" />
+                        <span>DNS Records to add in your Domain Registrar:</span>
+                      </span>
+                      <span className="text-[10px] text-emerald-400 font-mono font-bold">🔒 Free Auto SSL</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-emerald-400 font-bold">Points to: 185.199.108.153</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText('185.199.108.153');
-                          showToast('IP copied', 'success');
-                        }}
-                        className="px-2 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 hover:text-white"
-                      >
-                        Copy
-                      </button>
+
+                    <div className="space-y-2 text-xs font-mono">
+                      {/* Record 1 */}
+                      <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+                        <div>
+                          <span className="text-purple-400 font-bold mr-2">Type A</span>
+                          <span className="text-slate-300">Host: <code className="text-slate-100 font-bold">@</code></span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-emerald-400 font-bold">Points to: 185.199.108.153</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText('185.199.108.153');
+                              showToast('IP copied to clipboard!', 'success');
+                            }}
+                            className="px-2.5 py-1 rounded bg-slate-800 text-xs text-slate-200 hover:bg-slate-700 font-sans font-bold"
+                          >
+                            Copy IP
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Record 2 */}
+                      <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+                        <div>
+                          <span className="text-cyan-400 font-bold mr-2">CNAME</span>
+                          <span className="text-slate-300">Host: <code className="text-slate-100 font-bold">www</code></span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-cyan-300 font-bold">cname.onehost.cloud</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText('cname.onehost.cloud');
+                              showToast('CNAME copied to clipboard!', 'success');
+                            }}
+                            className="px-2.5 py-1 rounded bg-slate-800 text-xs text-slate-200 hover:bg-slate-700 font-sans font-bold"
+                          >
+                            Copy CNAME
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-900 pb-2">
+                      <span className="text-xs font-black text-white flex items-center gap-1.5">
+                        <Globe className="w-4 h-4 text-cyan-400" />
+                        <span>OneHost Cloud Nameservers:</span>
+                      </span>
+                      <span className="text-[10px] text-cyan-400 font-mono font-bold">⚡ Cloudflare Global Anycast</span>
+                    </div>
 
-                  {/* Record 2 */}
-                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between text-[11px]">
-                    <div>
-                      <span className="text-cyan-400 font-bold mr-2">CNAME</span>
-                      <span className="text-slate-300">Host: <code className="text-slate-100 font-bold">www</code></span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-400 text-[10px] block">NS1</span>
+                          <span className="text-cyan-300 font-bold">ns1.onehost.cloud</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText('ns1.onehost.cloud');
+                            showToast('NS1 copied', 'success');
+                          }}
+                          className="px-2 py-1 rounded bg-slate-800 text-[11px] text-slate-200 font-sans font-bold"
+                        >
+                          Copy
+                        </button>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-400 text-[10px] block">NS2</span>
+                          <span className="text-cyan-300 font-bold">ns2.onehost.cloud</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText('ns2.onehost.cloud');
+                            showToast('NS2 copied', 'success');
+                          }}
+                          className="px-2 py-1 rounded bg-slate-800 text-[11px] text-slate-200 font-sans font-bold"
+                        >
+                          Copy
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-cyan-300 font-bold">cname.onehost.cloud</span>
+                  </div>
+                )}
+
+                {/* REGISTRAR STEP-BY-STEP INSTRUCTIONS TABS */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                  <div className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                    <span>Step-by-Step Guide for Your Provider:</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                    {[
+                      { id: 'godaddy', name: 'GoDaddy' },
+                      { id: 'hostinger', name: 'Hostinger' },
+                      { id: 'namecheap', name: 'Namecheap' },
+                      { id: 'cloudflare', name: 'Cloudflare' },
+                      { id: 'bigrock', name: 'BigRock / Other' }
+                    ].map(reg => (
                       <button
+                        key={reg.id}
                         type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText('cname.onehost.cloud');
-                          showToast('CNAME copied', 'success');
-                        }}
-                        className="px-2 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 hover:text-white"
+                        onClick={() => setActiveRegistrarGuide(reg.id as any)}
+                        className={`px-3 py-1.5 rounded-xl font-extrabold whitespace-nowrap transition-all ${
+                          activeRegistrarGuide === reg.id
+                            ? 'bg-purple-600 text-white shadow-md'
+                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
                       >
-                        Copy
+                        {reg.name}
                       </button>
-                    </div>
+                    ))}
+                  </div>
+
+                  {/* Guide Content */}
+                  <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800/80 text-xs text-slate-300 space-y-2 leading-relaxed">
+                    {activeRegistrarGuide === 'godaddy' && (
+                      <ol className="list-decimal list-inside space-y-1 text-[11px]">
+                        <li>Log in to your <b>GoDaddy Account</b> → Go to <b>My Products</b> → Click <b>DNS</b> next to your domain.</li>
+                        <li>In DNS Records, edit <b>A Record</b> (Host <code>@</code>) and set Value to <code className="text-emerald-400 font-bold font-mono">185.199.108.153</code>.</li>
+                        <li>Edit or Add <b>CNAME Record</b> (Host <code>www</code>) and set Value to <code className="text-cyan-300 font-bold font-mono">cname.onehost.cloud</code>.</li>
+                        <li>Click <b>Save</b>. Done! Click "Verify DNS & Connect Domain" below.</li>
+                      </ol>
+                    )}
+
+                    {activeRegistrarGuide === 'hostinger' && (
+                      <ol className="list-decimal list-inside space-y-1 text-[11px]">
+                        <li>Log in to <b>Hostinger hPanel</b> → Go to <b>Domains</b> → Click <b>Manage</b>.</li>
+                        <li>Open <b>DNS Zone Editor</b>.</li>
+                        <li>Under <b>A Record</b>, point <code>@</code> to <code className="text-emerald-400 font-bold font-mono">185.199.108.153</code>.</li>
+                        <li>Under <b>CNAME Record</b>, point <code>www</code> to <code className="text-cyan-300 font-bold font-mono">cname.onehost.cloud</code>.</li>
+                        <li>Click <b>Save Changes</b> and verify below!</li>
+                      </ol>
+                    )}
+
+                    {activeRegistrarGuide === 'namecheap' && (
+                      <ol className="list-decimal list-inside space-y-1 text-[11px]">
+                        <li>Log in to <b>Namecheap Dashboard</b> → Click <b>Manage</b> next to your domain.</li>
+                        <li>Go to <b>Advanced DNS</b> tab.</li>
+                        <li>Add A Record for <code>@</code> pointing to <code className="text-emerald-400 font-bold font-mono">185.199.108.153</code>.</li>
+                        <li>Add CNAME Record for <code>www</code> pointing to <code className="text-cyan-300 font-bold font-mono">cname.onehost.cloud</code>.</li>
+                        <li>Save changes and return here to verify!</li>
+                      </ol>
+                    )}
+
+                    {activeRegistrarGuide === 'cloudflare' && (
+                      <ol className="list-decimal list-inside space-y-1 text-[11px]">
+                        <li>Open <b>Cloudflare Dashboard</b> → Select your domain → Click <b>DNS</b>.</li>
+                        <li>Add <b>A Record</b>: Name = <code>@</code>, IPv4 = <code className="text-emerald-400 font-bold font-mono">185.199.108.153</code>.</li>
+                        <li>Add <b>CNAME Record</b>: Name = <code>www</code>, Target = <code className="text-cyan-300 font-bold font-mono">cname.onehost.cloud</code>.</li>
+                        <li>Click <b>Save</b>. Cloudflare updates instantly!</li>
+                      </ol>
+                    )}
+
+                    {activeRegistrarGuide === 'bigrock' && (
+                      <ol className="list-decimal list-inside space-y-1 text-[11px]">
+                        <li>Log in to <b>BigRock / Registrar Account</b> → Go to Domain Management.</li>
+                        <li>Click <b>Manage DNS</b> or <b>DNS Records</b>.</li>
+                        <li>Add <b>A Record</b> (Host <code>@</code>) pointing to <code className="text-emerald-400 font-bold font-mono">185.199.108.153</code>.</li>
+                        <li>Add <b>CNAME Record</b> (Host <code>www</code>) pointing to <code className="text-cyan-300 font-bold font-mono">cname.onehost.cloud</code>.</li>
+                        <li>Click Save and verify connection!</li>
+                      </ol>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* ACTION BUTTONS */}
+              {/* Action Button */}
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
                   onClick={handleVerifyAndConnectDomain}
                   disabled={isVerifyingDns}
-                  className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-xl shadow-purple-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-xl shadow-purple-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                 >
                   {isVerifyingDns ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin text-purple-200" />
-                      <span>Verifying DNS Records & Issuing SSL...</span>
+                      <span>Verifying DNS Records & Issuing Free SSL...</span>
                     </>
                   ) : (
                     <>
                       <Check className="w-4 h-4 text-emerald-300" />
-                      <span>Verify DNS & Connect Domain (डोमेन कनेक्ट करें)</span>
+                      <span>Verify DNS & Connect Domain (डोमेन आसानी से कनेक्ट करें)</span>
                     </>
                   )}
                 </button>
@@ -2587,7 +3393,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                     srcDoc={editableCode}
                     title="Live Edit Preview"
                     className="w-full h-full border-none bg-slate-950"
-                    sandbox="allow-scripts allow-modals allow-same-origin"
+                    sandbox="allow-scripts allow-modals allow-same-origin allow-forms allow-popups allow-downloads"
                   />
                 </div>
               </div>
