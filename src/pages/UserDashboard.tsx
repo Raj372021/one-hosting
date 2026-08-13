@@ -55,6 +55,7 @@ import { RegisteredDomain, HostingAccount, DeploymentItem, InvoiceItem, SupportT
 import { DNSManagerModal } from '../components/DNSManagerModal';
 import { HostingControlPanelModal } from '../components/HostingControlPanelModal';
 import { InvoicePdfModal } from '../components/InvoicePdfModal';
+import { AiWebsiteBuilderHub } from '../components/AiWebsiteBuilderHub';
 
 export const UserDashboard: React.FC = () => {
   const { user, formatPrice, topUpWallet, setCurrentView } = useAuth();
@@ -612,6 +613,12 @@ export const UserDashboard: React.FC = () => {
                 </div>
 
                 {/* Sub-tab Specific Content */}
+                {(sidebarTab === 'builder' || sidebarTab === 'horizons' || sidebarTab === 'webapps') && (
+                  <div className="pt-2">
+                    <AiWebsiteBuilderHub initialAgent={sidebarTab === 'horizons' ? 'brand' : sidebarTab === 'webapps' ? 'db' : 'builder'} />
+                  </div>
+                )}
+
                 {sidebarTab === 'wordpress' && (
                   <div className="p-5 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
                     <div className="font-bold text-sm text-purple-300">WordPress Auto-Installer</div>
@@ -853,15 +860,8 @@ export const UserDashboard: React.FC = () => {
           )}
 
           {sidebarTab === 'ai_agents' && (
-            <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 animate-in fade-in duration-200">
-              <div className="font-bold text-base text-white flex items-center gap-2">
-                <Bot className="w-5 h-5 text-cyan-300" />
-                <span>Vibe Coding & AI Assistant Agent</span>
-              </div>
-              <p className="text-xs text-slate-400">Prompt in plain Hindi or English to generate full websites, fix bugs, or optimize database queries automatically.</p>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-cyan-300">
-                AI Agent Status: <span className="text-emerald-400 font-bold">READY TO CODE</span>
-              </div>
+            <div className="animate-in fade-in duration-200">
+              <AiWebsiteBuilderHub initialAgent="builder" />
             </div>
           )}
 

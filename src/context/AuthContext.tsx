@@ -19,6 +19,8 @@ interface AuthContextType {
   toggleWishlist: (domain: string) => void;
   formatPrice: (amountINR: number) => string;
   topUpWallet: (amount: number) => void;
+  addAiCredits: (credits: number) => void;
+  deductAiCredits: (credits: number) => boolean;
 }
 
 const DEFAULT_USER: User = {
@@ -28,6 +30,7 @@ const DEFAULT_USER: User = {
   role: 'user',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
   walletBalance: 2450,
+  aiCredits: 100,
   verified: true,
   twoFactorEnabled: true,
   createdAt: '2025-01-15T10:30:00Z',
@@ -42,6 +45,7 @@ const ADMIN_USER: User = {
   role: 'admin',
   avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
   walletBalance: 50000,
+  aiCredits: 10000,
   verified: true,
   twoFactorEnabled: true,
   createdAt: '2024-11-01T08:00:00Z',
@@ -125,6 +129,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const addAiCredits = (credits: number) => {
+    if (user) {
+      setUser(prev => prev ? {
+        ...prev,
+        aiCredits: (prev.aiCredits || 0) + credits
+      } : null);
+    }
+  };
+
+  const deductAiCredits = (credits: number): boolean => {
+    if (!user) return false;
+    const current = user.aiCredits || 0;
+    if (current < credits) return false;
+    setUser({
+      ...user,
+      aiCredits: current - credits
+    });
+    return true;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -144,7 +168,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         clearCart,
         toggleWishlist,
         formatPrice,
-        topUpWallet
+        topUpWallet,
+        addAiCredits,
+        deductAiCredits
       }}
     >
       {children}

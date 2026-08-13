@@ -8,6 +8,7 @@ export interface User {
   role: 'user' | 'admin';
   avatar?: string;
   walletBalance: number;
+  aiCredits?: number;
   verified: boolean;
   twoFactorEnabled: boolean;
   createdAt: string;

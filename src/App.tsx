@@ -27,10 +27,10 @@ const MainAppContent: React.FC = () => {
       />
 
       <main className="flex-1">
-        {currentView === 'home' && <HomePage />}
-        {currentView === 'domains' && <HomePage />}
-        {currentView === 'hosting' && <HomePage />}
-        {currentView === 'pricing' && <HomePage />}
+        {currentView === 'home' && <HomePage onOpenCart={() => setIsCartOpen(true)} />}
+        {currentView === 'domains' && <HomePage onOpenCart={() => setIsCartOpen(true)} />}
+        {currentView === 'hosting' && <HomePage onOpenCart={() => setIsCartOpen(true)} />}
+        {currentView === 'pricing' && <HomePage onOpenCart={() => setIsCartOpen(true)} />}
 
         {currentView === 'dashboard' && <UserDashboard />}
         {currentView === 'deployments' && <UserDashboard />}

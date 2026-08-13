@@ -193,6 +193,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
                       <span>Wallet Balance:</span>
                       <span className="font-bold">{formatPrice(user.walletBalance)}</span>
                     </div>
+
+                    {/* Buy AI Credits Button Under Profile */}
+                    <button
+                      onClick={() => {
+                        setCurrentView('billing');
+                        setIsUserDropdownOpen(false);
+                      }}
+                      className="mt-2.5 w-full px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all border border-cyan-400/30"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                      <span>Buy AI Credits</span>
+                    </button>
                   </div>
 
                   <button

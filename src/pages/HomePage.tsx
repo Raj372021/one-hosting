@@ -12,9 +12,14 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { DomainSearchBox } from '../components/DomainSearchBox';
+import { AiWebsiteBuilderHub } from '../components/AiWebsiteBuilderHub';
 import { HOSTING_PLANS, DOMAIN_PRICING } from '../data/hostingPlans';
 
-export const HomePage: React.FC = () => {
+interface HomePageProps {
+  onOpenCart?: () => void;
+}
+
+export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
   const { formatPrice, addToCart, setCurrentView } = useAuth();
   const { showToast } = useToast();
 
@@ -53,7 +58,10 @@ export const HomePage: React.FC = () => {
       price: totalPrice,
       details: plan.freeDomain ? 'Includes FREE 1-Year Domain Name + Free SSL' : 'Includes Free Unlimited SSL'
     });
-    showToast(`Added ${plan.name} (${months} Months Plan) to cart!`, 'success');
+    showToast(`🛒 ${plan.name} (${months} Months) added to cart! Opening checkout...`, 'success');
+    if (onOpenCart) {
+      onOpenCart();
+    }
   };
 
   const [activeTab, setActiveTab] = useState<'web' | 'cloud'>('web');
@@ -62,12 +70,35 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="space-y-20 pb-20">
-      {/* 1. DOMAIN SEARCH SECTION */}
-      <section className="relative pt-10 lg:pt-16 pb-12 overflow-hidden">
+      {/* 1. TOP HERO: FRONT-PAGE AI WEBSITE & APP BUILDER AGENT */}
+      <section className="relative pt-8 lg:pt-12 pb-6 overflow-hidden">
         {/* Glowing Background Radial Accents */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none" />
-        <div className="absolute top-1/3 left-1/3 w-[400px] h-[300px] bg-purple-600/15 blur-[100px] rounded-full pointer-events-none" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[650px] h-[380px] bg-purple-600/20 blur-[130px] rounded-full pointer-events-none" />
+        <div className="absolute top-1/3 left-1/3 w-[450px] h-[320px] bg-indigo-600/20 blur-[110px] rounded-full pointer-events-none" />
 
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative z-10">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold uppercase tracking-wider">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+              <span>PRIMARY AI AGENT WEBSITE & APP BUILDER HUB</span>
+            </div>
+            <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight max-w-4xl mx-auto leading-tight">
+              Build Any Website or Full App from a{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-300 to-cyan-400">
+                Single AI Prompt
+              </span>
+            </h1>
+            <p className="text-slate-300 text-base sm:text-lg max-w-3xl mx-auto font-normal leading-relaxed">
+              Describe your dream website or SaaS app in natural language. Watch our AI Agent write live code, render a real-time preview, and export directly to your GitHub account or 1-Click Cloud Hosting!
+            </p>
+          </div>
+
+          <AiWebsiteBuilderHub initialAgent="builder" />
+        </div>
+      </section>
+
+      {/* 2. DOMAIN SEARCH SECTION */}
+      <section className="relative pt-6 pb-10 overflow-hidden border-t border-slate-900/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center space-y-6">
           {/* Top Pill Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold tracking-wide">
@@ -76,15 +107,12 @@ export const HomePage: React.FC = () => {
           </div>
 
           {/* Display Headline */}
-          <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white max-w-4xl mx-auto leading-tight">
-            Search Domain, Choose Hosting &{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-400">
-              Deploy Instantly
-            </span>
-          </h1>
+          <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-white max-w-4xl mx-auto leading-tight">
+            Register Your Custom Domain & Link to AI App
+          </h2>
 
-          <p className="text-sm sm:text-lg text-slate-300 max-w-2xl mx-auto font-normal leading-relaxed">
-            Instant global DNS lookup, ultra-fast NVMe cloud hosting, and 1-click GitHub cloud deployment.
+          <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto font-normal leading-relaxed">
+            Instant global DNS lookup, ultra-fast NVMe cloud hosting, and custom domain mapping for your AI-built apps.
           </p>
 
           {/* Domain Search Hero Widget */}
