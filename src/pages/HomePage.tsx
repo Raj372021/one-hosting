@@ -13,9 +13,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useMargins } from '../context/MarginContext';
 import { DomainSearchBox } from '../components/DomainSearchBox';
 import { AiWebsiteBuilderHub } from '../components/AiWebsiteBuilderHub';
-import { HOSTING_PLANS, DOMAIN_PRICING, VPS_PLANS, DEDICATED_PLANS } from '../data/hostingPlans';
+import { HostingPlan } from '../types';
 
 interface HomePageProps {
   onOpenCart?: () => void;
@@ -23,6 +24,7 @@ interface HomePageProps {
 
 export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
   const { formatPrice, addToCart, setCurrentView } = useAuth();
+  const { dynamicHostingPlans, dynamicDomainPricing, dynamicVpsPlans, dynamicDedicatedPlans } = useMargins();
   const { showToast } = useToast();
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly' | '4years'>('4years');
@@ -41,13 +43,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
     return 48;
   };
 
-  const getCycleTotal = (plan: typeof HOSTING_PLANS[0]) => {
+  const getCycleTotal = (plan: HostingPlan) => {
     const rate = getCycleRate(plan.monthlyPriceINR);
     const months = getCycleMonths(plan.id);
     return rate * months;
   };
 
-  const handleSelectPlan = (plan: typeof HOSTING_PLANS[0]) => {
+  const handleSelectPlan = (plan: HostingPlan) => {
     const rate = getCycleRate(plan.monthlyPriceINR);
     const months = getCycleMonths(plan.id);
     const totalPrice = getCycleTotal(plan);
@@ -67,7 +69,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
     }
   };
 
-  const handleSelectVpsPlan = (vps: typeof VPS_PLANS[0]) => {
+  const handleSelectVpsPlan = (vps: typeof dynamicVpsPlans[0]) => {
     const months = billingCycle === 'monthly' ? 1 : billingCycle === 'yearly' ? 12 : 48;
     const rate = billingCycle === 'monthly' ? vps.priceINR * 1.5 : billingCycle === 'yearly' ? vps.priceINR * 1.2 : vps.priceINR;
     const totalPrice = rate * months;
@@ -87,7 +89,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
     }
   };
 
-  const handleSelectDedicatedPlan = (ded: typeof DEDICATED_PLANS[0]) => {
+  const handleSelectDedicatedPlan = (ded: typeof dynamicDedicatedPlans[0]) => {
     const months = billingCycle === 'monthly' ? 1 : billingCycle === 'yearly' ? 12 : 48;
     const rate = billingCycle === 'monthly' ? ded.priceINR * 1.3 : billingCycle === 'yearly' ? ded.priceINR * 1.1 : ded.priceINR;
     const totalPrice = rate * months;
@@ -107,7 +109,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
     }
   };
 
-  const filteredPlans = HOSTING_PLANS.filter(p => p.category === activeTab);
+  const filteredPlans = dynamicHostingPlans.filter(p => p.category === activeTab);
 
   return (
     <div className="space-y-20 pb-20">
@@ -163,7 +165,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
 
           {/* Popular Domain TLD Price Strip */}
           <div className="pt-4 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 border-t border-slate-900/80 max-w-3xl mx-auto">
-            {DOMAIN_PRICING.slice(0, 5).map(item => (
+            {dynamicDomainPricing.slice(0, 5).map(item => (
               <div key={item.tld} className="flex items-center gap-1.5 font-mono">
                 <span className="font-extrabold text-white">{item.tld}</span>
                 <span className="text-emerald-400 font-bold">{formatPrice(item.registerINR)}</span>
@@ -254,7 +256,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
         {/* VPS GRID DISPLAY */}
         {activeTab === 'vps' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4">
-            {VPS_PLANS.map((vps, idx) => {
+            {dynamicVpsPlans.map((vps, idx) => {
               const rate = billingCycle === 'monthly' ? vps.priceINR * 1.5 : billingCycle === 'yearly' ? vps.priceINR * 1.2 : vps.priceINR;
               return (
                 <div key={idx} className="p-6 rounded-3xl bg-slate-950 border border-slate-800 hover:border-purple-500/50 transition-all flex flex-col justify-between space-y-6 shadow-xl relative">
@@ -317,7 +319,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenCart }) => {
         {/* DEDICATED BARE METAL DISPLAY */}
         {activeTab === 'dedicated' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-            {DEDICATED_PLANS.map((ded, idx) => {
+            {dynamicDedicatedPlans.map((ded, idx) => {
               const rate = billingCycle === 'monthly' ? ded.priceINR * 1.3 : billingCycle === 'yearly' ? ded.priceINR * 1.1 : ded.priceINR;
               return (
                 <div key={idx} className="p-8 rounded-3xl bg-slate-950 border border-slate-800 hover:border-cyan-500/50 transition-all flex flex-col justify-between space-y-6 shadow-xl relative">

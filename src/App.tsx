@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { MarginProvider } from './context/MarginContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
@@ -39,10 +40,12 @@ const MainAppContent: React.FC = () => {
           </div>
         )}
 
-        {currentView === 'dashboard' && <UserDashboard />}
-        {currentView === 'deployments' && <UserDashboard />}
-        {currentView === 'billing' && <UserDashboard />}
-        {currentView === 'tickets' && <UserDashboard />}
+        {currentView === 'dashboard' && <UserDashboard initialTab="home" />}
+        {currentView === 'credits' && <UserDashboard initialTab="credits" />}
+        {currentView === 'deployments' && <UserDashboard initialTab="builder" />}
+        {currentView === 'billing' && <UserDashboard initialTab="billing" />}
+        {currentView === 'tickets' && <UserDashboard initialTab="tickets" />}
+        {currentView === 'profile' && <UserDashboard initialTab="profile" />}
 
         {currentView === 'admin' && <AdminDashboard />}
       </main>
@@ -74,9 +77,11 @@ const MainAppContent: React.FC = () => {
 export default function App() {
   return (
     <ToastProvider>
-      <AuthProvider>
-        <MainAppContent />
-      </AuthProvider>
+      <MarginProvider>
+        <AuthProvider>
+          <MainAppContent />
+        </AuthProvider>
+      </MarginProvider>
     </ToastProvider>
   );
 }

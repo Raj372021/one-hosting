@@ -30,8 +30,6 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) => {
   const {
     user,
-    currency,
-    setCurrency,
     theme,
     setTheme,
     cart,
@@ -138,26 +136,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
 
         {/* Right Action Bar */}
         <div className="flex items-center gap-3">
-          {/* Currency Switcher */}
-          <div className="flex items-center rounded-lg bg-slate-900 border border-slate-800 p-1 text-xs font-semibold">
-            <button
-              onClick={() => setCurrency('INR')}
-              className={`px-2 py-1 rounded-md transition-colors ${
-                currency === 'INR' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              ₹ INR
-            </button>
-            <button
-              onClick={() => setCurrency('USD')}
-              className={`px-2 py-1 rounded-md transition-colors ${
-                currency === 'USD' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              $ USD
-            </button>
-          </div>
-
           {/* Dark / Light Theme Toggle */}
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -205,23 +183,43 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
                   <div className="p-3 border-b border-slate-800 mb-1">
                     <div className="font-semibold text-sm text-white">{user.name}</div>
                     <div className="text-xs text-slate-400 truncate">{user.email}</div>
-                    <div className="mt-2 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg flex items-center justify-between">
-                      <span>Wallet Balance:</span>
-                      <span className="font-bold">{formatPrice(user.walletBalance)}</span>
+                    <div
+                      onClick={() => {
+                        setCurrentView('credits');
+                        setIsUserDropdownOpen(false);
+                      }}
+                      className="mt-2 text-xs font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg flex items-center justify-between cursor-pointer transition-colors"
+                      title="Click to view and top-up Wallet"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Wallet Balance:</span>
+                      </span>
+                      <span className="font-bold text-white">{formatPrice(user.walletBalance)}</span>
                     </div>
 
-                    {/* AI Credits Count & Buy Button */}
-                    <div className="mt-1.5 text-xs font-medium text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-lg flex items-center justify-between">
-                      <span>AI Credits Available:</span>
+                    {/* AI Credits Count & Direct Click */}
+                    <div
+                      onClick={() => {
+                        setCurrentView('credits');
+                        setIsUserDropdownOpen(false);
+                      }}
+                      className="mt-1.5 text-xs font-medium text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 px-2.5 py-1.5 rounded-lg flex items-center justify-between cursor-pointer transition-colors"
+                      title="Click to buy more AI Credits"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>AI Credits:</span>
+                      </span>
                       <span className="font-black text-amber-300">{user.aiCredits ?? 100}</span>
                     </div>
 
                     <button
                       onClick={() => {
-                        setCurrentView('billing');
+                        setCurrentView('credits');
                         setIsUserDropdownOpen(false);
                       }}
-                      className="mt-2.5 w-full px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all border border-cyan-400/30"
+                      className="mt-2.5 w-full px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all border border-cyan-400/30 cursor-pointer"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
                       <span>Buy AI Credits Pack</span>
@@ -230,17 +228,25 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
 
                   <button
                     onClick={() => { setCurrentView('dashboard'); setIsUserDropdownOpen(false); }}
-                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-800 flex items-center gap-2"
+                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
                   >
                     <LayoutDashboard className="w-4 h-4 text-indigo-400" />
                     <span>Customer Dashboard</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setCurrentView('credits'); setIsUserDropdownOpen(false); }}
+                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-amber-300 hover:bg-amber-950/40 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>AI Credits & Wallet</span>
                   </button>
 
                   {/* Show Admin Command Center ONLY if user is an admin */}
                   {user.role === 'admin' && (
                     <button
                       onClick={() => { setCurrentView('admin'); setIsUserDropdownOpen(false); }}
-                      className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-purple-300 hover:bg-purple-950/40 flex items-center gap-2"
+                      className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-purple-300 hover:bg-purple-950/40 flex items-center gap-2 cursor-pointer"
                     >
                       <Shield className="w-4 h-4 text-purple-400" />
                       <span>Admin Command Center</span>
@@ -248,18 +254,26 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart, onOpenAiAdvisor }) =
                   )}
 
                   <button
-                    onClick={() => { setCurrentView('billing'); setIsUserDropdownOpen(false); }}
-                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-800 flex items-center gap-2"
+                    onClick={() => { setCurrentView('profile'); setIsUserDropdownOpen(false); }}
+                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
                   >
-                    <CreditCard className="w-4 h-4 text-cyan-400" />
-                    <span>Invoices & Billing</span>
+                    <UserIcon className="w-4 h-4 text-cyan-400" />
+                    <span>Account Profile & Security</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setCurrentView('billing'); setIsUserDropdownOpen(false); }}
+                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                  >
+                    <CreditCard className="w-4 h-4 text-indigo-400" />
+                    <span>Invoices & GST Billing</span>
                   </button>
 
                   <button
                     onClick={() => { setCurrentView('tickets'); setIsUserDropdownOpen(false); }}
-                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-800 flex items-center gap-2"
+                    className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-slate-200 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
                   >
-                    <Headphones className="w-4 h-4 text-amber-400" />
+                    <Headphones className="w-4 h-4 text-emerald-400" />
                     <span>Support Tickets</span>
                   </button>
 

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Search, Globe, Check, Plus, Heart, Sparkles, AlertCircle, ShoppingCart } from 'lucide-react';
+import { Search, Globe, Check, Plus, Heart, Sparkles, AlertCircle, ShoppingCart, ShieldCheck, DollarSign, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useMargins } from '../context/MarginContext';
 import { checkDomainAvailability } from '../services/api';
 import { DomainSearchResult } from '../types';
 
 export const DomainSearchBox: React.FC = () => {
-  const { addToCart, wishlist, toggleWishlist, formatPrice } = useAuth();
+  const { user, addToCart, wishlist, toggleWishlist, formatPrice, setCurrentView } = useAuth();
+  const { margins } = useMargins();
   const { showToast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,6 +88,24 @@ export const DomainSearchBox: React.FC = () => {
         </form>
       </div>
 
+      {/* Admin Profit Margin Notice & Real DNS Live Badge */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-3 px-2 text-[11px] text-slate-400">
+        <div className="flex items-center gap-1.5 font-medium text-emerald-400">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Real-time Global DNS & Registry Lookup (100% Genuine Status)</span>
+        </div>
+
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => setCurrentView('admin')}
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all font-semibold cursor-pointer"
+          >
+            <DollarSign className="w-3 h-3 text-emerald-400" />
+            <span>Domain Margin: +{margins.globalDomainMarginPct}% (Adjust in Admin)</span>
+          </button>
+        )}
+      </div>
+
       {/* TLD Quick Filter Pills */}
       <div className="flex flex-wrap items-center justify-center gap-2 mt-4 text-xs font-semibold">
         <span className="text-slate-400 mr-2">Filter TLDs:</span>
@@ -107,9 +127,14 @@ export const DomainSearchBox: React.FC = () => {
       {/* Live Domain Search Results */}
       {results.length > 0 && (
         <div className="mt-8 space-y-3 bg-slate-900/80 border border-slate-800 p-4 sm:p-6 rounded-2xl backdrop-blur-xl">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span>Domain Results for "{searchedName}"</span>
-            <span>{filteredResults.length} TLD Options</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <span className="flex items-center gap-2 text-white">
+              <Globe className="w-4 h-4 text-indigo-400" />
+              <span>Real DNS Lookup Results for "{searchedName}"</span>
+            </span>
+            <span className="text-emerald-400 font-mono text-[11px]">
+              {filteredResults.filter(r => r.available).length} Available / {filteredResults.length} Checked
+            </span>
           </div>
 
           <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
@@ -120,14 +145,14 @@ export const DomainSearchBox: React.FC = () => {
                   key={item.domain}
                   className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
                     item.available
-                      ? 'bg-slate-950/60 border-slate-800 hover:border-indigo-500/50'
-                      : 'bg-slate-950/40 border-slate-900 opacity-70'
+                      ? 'bg-slate-950/80 border-slate-800 hover:border-indigo-500/50'
+                      : 'bg-slate-950/40 border-slate-900/80 opacity-75'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`p-2 rounded-lg ${
-                        item.available ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                      className={`p-2.5 rounded-xl shrink-0 ${
+                        item.available ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                       }`}
                     >
                       {item.available ? <Check className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -138,14 +163,14 @@ export const DomainSearchBox: React.FC = () => {
                         <span className="font-bold text-lg text-white font-mono">{item.domain}</span>
                         {item.available ? (
                           <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            AVAILABLE
+                            AVAILABLE FOR REGISTRATION
                           </span>
                         ) : (
                           <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                            TAKEN (REAL DNS)
+                            TAKEN (ACTIVE IN DNS)
                           </span>
                         )}
-                        {item.discountTag && (
+                        {item.discountTag && item.available && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                             {item.discountTag}
                           </span>
@@ -154,8 +179,8 @@ export const DomainSearchBox: React.FC = () => {
                       <div className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-2">
                         <span>{item.statusText || (item.available ? 'Includes free WHOIS Privacy Protection & DNS Records' : 'Domain is registered in global DNS')}</span>
                         {item.whoisNs && item.whoisNs.length > 0 && (
-                          <span className="text-[11px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                            NS: {item.whoisNs.join(', ')}
+                          <span className="text-[11px] font-mono text-cyan-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                            Active NS: {item.whoisNs.join(', ')}
                           </span>
                         )}
                       </div>
@@ -194,7 +219,7 @@ export const DomainSearchBox: React.FC = () => {
                       {item.available ? (
                         <button
                           onClick={() => handleAddToCart(item)}
-                          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all"
+                          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-all"
                         >
                           <ShoppingCart className="w-4 h-4" />
                           <span>Add to Cart</span>
@@ -202,7 +227,7 @@ export const DomainSearchBox: React.FC = () => {
                       ) : (
                         <button
                           disabled
-                          className="px-4 py-2 rounded-xl bg-slate-800 text-slate-500 font-semibold text-xs cursor-not-allowed"
+                          className="px-4 py-2.5 rounded-xl bg-slate-800/80 text-slate-500 font-semibold text-xs cursor-not-allowed border border-slate-700/50"
                         >
                           Unavailable
                         </button>

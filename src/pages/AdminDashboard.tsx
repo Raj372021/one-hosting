@@ -24,10 +24,18 @@ import {
   AlertTriangle,
   Sliders,
   Layers,
-  Zap
+  Zap,
+  Percent,
+  Calculator,
+  ArrowUpRight,
+  Sparkle,
+  CheckCircle,
+  RotateCcw,
+  HelpCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useMargins } from '../context/MarginContext';
 import { fetchAdminStats, fetchInvoices } from '../services/api';
 import { AdminStats, InvoiceItem, HostingPlan } from '../types';
 import { HOSTING_PLANS, DOMAIN_PRICING, DomainPricingItem } from '../data/hostingPlans';
@@ -41,6 +49,26 @@ export const AdminDashboard: React.FC = () => {
   >('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
+
+  const {
+    margins,
+    updateGlobalHostingMargin,
+    updateGlobalDomainMargin,
+    updateGlobalVpsMargin,
+    updateGlobalDedicatedMargin,
+    updateGlobalAiMargin,
+    updatePlanMargin,
+    updateTldMargin,
+    bulkSetHostingMargins,
+    bulkSetDomainMargins,
+    saveMargins,
+    resetMargins,
+    hasUnsavedChanges,
+    dynamicHostingPlans,
+    dynamicDomainPricing
+  } = useMargins();
+
+  const [marginSubTab, setMarginSubTab] = useState<'global' | 'hosting_plans' | 'domains' | 'simulator'>('global');
 
   // Profit Margin Calculator State
   const [calcSubscribers, setCalcSubscribers] = useState<number>(250);
@@ -656,6 +684,29 @@ export const AdminDashboard: React.FC = () => {
       {/* TAB 3: HOSTING PLAN RATES MANAGER */}
       {activeTab === 'plans' && (
         <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Quick Margin Banner */}
+          <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                <Percent className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Dynamic Profit Margin Engine Active</h4>
+                <p className="text-xs text-slate-300">Set percentage markups (e.g. +80%) or configure per-plan profit margins dynamically.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setActiveTab('margins');
+                setMarginSubTab('hosting_plans');
+              }}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+            >
+              <span>Manage Margins %</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
             <div className="font-bold text-base text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -829,6 +880,29 @@ export const AdminDashboard: React.FC = () => {
       {/* TAB 5: DOMAIN EXTENSION PRICING */}
       {activeTab === 'domains' && (
         <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Quick Margin Banner */}
+          <div className="p-4 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400">
+                <Percent className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Live Domain Registry Margins Active</h4>
+                <p className="text-xs text-slate-300">Set percentage markups (e.g. +40%) or configure per-TLD registry cost vs retail selling price.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setActiveTab('margins');
+                setMarginSubTab('domains');
+              }}
+              className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+            >
+              <span>Adjust Domain Margins %</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
             <div className="font-bold text-base text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -952,244 +1026,608 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 7: HOSTING MARGIN % & PROFITABILITY ANALYSIS */}
+      {/* TAB 7: HOSTING & DOMAIN PROFIT MARGINS CONTROL SUITE */}
       {activeTab === 'margins' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Top Banner */}
-          <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 border border-emerald-500/30 space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="font-extrabold text-xl text-white flex items-center gap-2">
-                  <DollarSign className="w-6 h-6 text-emerald-400" />
-                  <span>Hosting Profit Margins & Cost Analytics</span>
-                </h2>
-                <p className="text-xs text-slate-300 mt-1">
-                  Comprehensive breakdown of wholesale bare-metal cost vs customer retail price across Web Hosting, VPS, Domains & AI.
-                </p>
+          {/* Master Control Header */}
+          <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 border border-emerald-500/40 shadow-2xl relative overflow-hidden">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <Percent className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="font-extrabold text-2xl text-white tracking-tight flex items-center gap-2">
+                      <span>Hosting & Domain Profit Margin Manager</span>
+                      <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        ACTIVE SYNC
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-300">
+                      Instantly adjust profit margin percentages across Web Hosting, Cloud VPS, Bare-Metal & Domains. All updates reflect in real-time across customer cart and checkout.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-right">
-                <div className="text-[10px] font-bold text-emerald-300 uppercase">Average Gross Profit Margin</div>
-                <div className="text-2xl font-black text-white">76.4%</div>
+
+              {/* Action Buttons: Save & Reset */}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => {
+                    resetMargins();
+                    showToast('Reset all profit margins to factory defaults', 'info');
+                  }}
+                  className="px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:border-slate-600 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset Defaults</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    saveMargins();
+                    showToast('🎉 Profit margins saved successfully! Live pricing updated.', 'success');
+                  }}
+                  className={`px-6 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl transition-all cursor-pointer ${
+                    hasUnsavedChanges
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/30 ring-2 ring-emerald-400 animate-pulse'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                  }`}
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{hasUnsavedChanges ? '💾 SAVE PROFIT MARGINS (UNSAVED)' : '✓ MARGINS SAVED'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-emerald-500/20">
+              <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Global Hosting Margin</div>
+                <div className="text-xl font-black text-emerald-400 font-mono">+{margins.globalHostingMarginPct}%</div>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Global Domain Margin</div>
+                <div className="text-xl font-black text-cyan-400 font-mono">+{margins.globalDomainMarginPct}%</div>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Cloud VPS Margin</div>
+                <div className="text-xl font-black text-purple-400 font-mono">+{margins.globalVpsMarginPct}%</div>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Bare-Metal Dedicated</div>
+                <div className="text-xl font-black text-amber-400 font-mono">+{margins.globalDedicatedMarginPct}%</div>
               </div>
             </div>
           </div>
 
-          {/* Detailed Product Margin Breakdown Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* 1. Single Web Hosting */}
-            <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-sm text-white">Single Web Hosting</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  81% MARGIN
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">Entry level cPanel/NVMe SSD cloud container</p>
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1.5 font-mono">
-                <div className="flex justify-between text-slate-400">
-                  <span>Retail Price:</span>
-                  <span className="font-bold text-white">₹79/mo</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Wholesale Cost:</span>
-                  <span className="text-rose-400">₹15/mo</span>
-                </div>
-                <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-800 pt-1.5">
-                  <span>Net Profit / Sub:</span>
-                  <span>+₹64/mo</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Premium Web Hosting */}
-            <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-sm text-white">Premium Web Hosting</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  81.2% MARGIN
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">100 Websites, Free Domain & SSL</p>
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1.5 font-mono">
-                <div className="flex justify-between text-slate-400">
-                  <span>Retail Price:</span>
-                  <span className="font-bold text-white">₹149/mo</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Wholesale Cost:</span>
-                  <span className="text-rose-400">₹28/mo</span>
-                </div>
-                <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-800 pt-1.5">
-                  <span>Net Profit / Sub:</span>
-                  <span>+₹121/mo</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Business Cloud Hosting */}
-            <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-sm text-white">Business Cloud Hosting</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  82.0% MARGIN
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">200 Websites, Daily Backups & CDN</p>
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1.5 font-mono">
-                <div className="flex justify-between text-slate-400">
-                  <span>Retail Price:</span>
-                  <span className="font-bold text-white">₹249/mo</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Wholesale Cost:</span>
-                  <span className="text-rose-400">₹45/mo</span>
-                </div>
-                <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-800 pt-1.5">
-                  <span>Net Profit / Sub:</span>
-                  <span>+₹204/mo</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Cloud VPS 4-Core Server */}
-            <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-sm text-white">Cloud VPS (4 vCPU / 8GB)</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  64.4% MARGIN
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">Dedicated KVM instance for high traffic apps</p>
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1.5 font-mono">
-                <div className="flex justify-between text-slate-400">
-                  <span>Retail Price:</span>
-                  <span className="font-bold text-white">₹899/mo</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Bare-Metal Cost:</span>
-                  <span className="text-rose-400">₹320/mo</span>
-                </div>
-                <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-800 pt-1.5">
-                  <span>Net Profit / Sub:</span>
-                  <span>+₹579/mo</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 5. Domain Registrations (.com / .in) */}
-            <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-sm text-white">Domain Extensions (.in)</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                  41.8% MARGIN
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">Registrar registry cost vs retail sale price</p>
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1.5 font-mono">
-                <div className="flex justify-between text-slate-400">
-                  <span>Retail Price:</span>
-                  <span className="font-bold text-white">₹499/yr</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Registry Cost:</span>
-                  <span className="text-rose-400">₹290/yr</span>
-                </div>
-                <div className="flex justify-between text-cyan-400 font-bold border-t border-slate-800 pt-1.5">
-                  <span>Net Profit / Domain:</span>
-                  <span>+₹209/yr</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 6. AI Token Generation */}
-            <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-sm text-white">AI Vibe Tokens & Code Gen</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  86.6% MARGIN
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">Gemini 2.5 API token wholesale cost vs AI credits</p>
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-1.5 font-mono">
-                <div className="flex justify-between text-slate-400">
-                  <span>Retail Rate / 1k Tokens:</span>
-                  <span className="font-bold text-white">₹0.15</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>LLM Wholesale Cost:</span>
-                  <span className="text-rose-400">₹0.02</span>
-                </div>
-                <div className="flex justify-between text-purple-400 font-bold border-t border-slate-800 pt-1.5">
-                  <span>Net Margin / 1k Tokens:</span>
-                  <span>+₹0.13</span>
-                </div>
-              </div>
-            </div>
+          {/* Sub-Navigation Switcher */}
+          <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-slate-900 border border-slate-800">
+            {[
+              { id: 'global', label: '⚡ Master Margin Controllers', icon: Sliders },
+              { id: 'hosting_plans', label: '🖥️ All Hosting Plans (Individual %)', icon: Server },
+              { id: 'domains', label: '🌐 All Domain TLDs (Individual %)', icon: Globe },
+              { id: 'simulator', label: '📈 Live Profit & MRR Simulator', icon: Calculator }
+            ].map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setMarginSubTab(tab.id as any)}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                    marginSubTab === tab.id
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Interactive Projected Profitability Calculator */}
-          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
-            <div className="font-bold text-base text-white flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-emerald-400" />
-              <span>Interactive Monthly Net Profit Simulator</span>
+          {/* 1. MASTER QUICK MARGIN CONTROLLERS */}
+          {marginSubTab === 'global' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 1A. Global Web Hosting Margin */}
+                <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-2xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                        <Server className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-base text-white">Web & Cloud Hosting Margin</h3>
+                        <p className="text-xs text-slate-400">Applies profit markup on wholesale server containers</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-black text-purple-400 font-mono">+{margins.globalHostingMarginPct}%</span>
+                  </div>
+
+                  {/* Stepper Buttons & Slider */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateGlobalHostingMargin(margins.globalHostingMarginPct - 10)}
+                        className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        -10%
+                      </button>
+                      <button
+                        onClick={() => updateGlobalHostingMargin(margins.globalHostingMarginPct - 5)}
+                        className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        -5%
+                      </button>
+                      <input
+                        type="range"
+                        min="0"
+                        max="300"
+                        step="5"
+                        value={margins.globalHostingMarginPct}
+                        onChange={e => updateGlobalHostingMargin(Number(e.target.value))}
+                        className="flex-1 accent-purple-500 h-2 bg-slate-950 rounded-lg cursor-pointer"
+                      />
+                      <button
+                        onClick={() => updateGlobalHostingMargin(margins.globalHostingMarginPct + 5)}
+                        className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        +5%
+                      </button>
+                      <button
+                        onClick={() => updateGlobalHostingMargin(margins.globalHostingMarginPct + 10)}
+                        className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        +10%
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-2">
+                      <button
+                        onClick={() => {
+                          bulkSetHostingMargins(margins.globalHostingMarginPct);
+                          showToast(`Applied +${margins.globalHostingMarginPct}% margin to ALL individual hosting plans!`, 'success');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 font-bold text-[11px] transition-all cursor-pointer"
+                      >
+                        ⚡ Bulk Apply +{margins.globalHostingMarginPct}% to All Plans
+                      </button>
+                      <span className="text-slate-400 font-mono text-[11px]">Default: 80%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1B. Global Domain Extension Margin */}
+                <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                        <Globe className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-base text-white">Domain Extensions Margin</h3>
+                        <p className="text-xs text-slate-400">Markup on ICANN & NIXI wholesale registry fees</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-black text-cyan-400 font-mono">+{margins.globalDomainMarginPct}%</span>
+                  </div>
+
+                  {/* Stepper Buttons & Slider */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateGlobalDomainMargin(margins.globalDomainMarginPct - 10)}
+                        className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        -10%
+                      </button>
+                      <button
+                        onClick={() => updateGlobalDomainMargin(margins.globalDomainMarginPct - 5)}
+                        className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        -5%
+                      </button>
+                      <input
+                        type="range"
+                        min="0"
+                        max="200"
+                        step="5"
+                        value={margins.globalDomainMarginPct}
+                        onChange={e => updateGlobalDomainMargin(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500 h-2 bg-slate-950 rounded-lg cursor-pointer"
+                      />
+                      <button
+                        onClick={() => updateGlobalDomainMargin(margins.globalDomainMarginPct + 5)}
+                        className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        +5%
+                      </button>
+                      <button
+                        onClick={() => updateGlobalDomainMargin(margins.globalDomainMarginPct + 10)}
+                        className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                      >
+                        +10%
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-2">
+                      <button
+                        onClick={() => {
+                          bulkSetDomainMargins(margins.globalDomainMarginPct);
+                          showToast(`Applied +${margins.globalDomainMarginPct}% margin to ALL domain extensions!`, 'success');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/30 font-bold text-[11px] transition-all cursor-pointer"
+                      >
+                        ⚡ Bulk Apply +{margins.globalDomainMarginPct}% to All TLDs
+                      </button>
+                      <span className="text-slate-400 font-mono text-[11px]">Default: 40%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1C. Cloud VPS Margin */}
+                <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        <Zap className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-base text-white">Cloud VPS Server Margin</h3>
+                        <p className="text-xs text-slate-400">Markup on KVM hypervisor & IPv4 pool costs</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-black text-indigo-400 font-mono">+{margins.globalVpsMarginPct}%</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateGlobalVpsMargin(margins.globalVpsMarginPct - 5)}
+                      className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white cursor-pointer"
+                    >
+                      -5%
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="200"
+                      step="5"
+                      value={margins.globalVpsMarginPct}
+                      onChange={e => updateGlobalVpsMargin(Number(e.target.value))}
+                      className="flex-1 accent-indigo-500 h-2 bg-slate-950 rounded-lg cursor-pointer"
+                    />
+                    <button
+                      onClick={() => updateGlobalVpsMargin(margins.globalVpsMarginPct + 5)}
+                      className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white cursor-pointer"
+                    >
+                      +5%
+                    </button>
+                  </div>
+                </div>
+
+                {/* 1D. Dedicated Server Margin */}
+                <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <Shield className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-base text-white">Dedicated Bare-Metal Margin</h3>
+                        <p className="text-xs text-slate-400">Markup on Tier-4 datacenter rackspace & power</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-black text-emerald-400 font-mono">+{margins.globalDedicatedMarginPct}%</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateGlobalDedicatedMargin(margins.globalDedicatedMarginPct - 5)}
+                      className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white cursor-pointer"
+                    >
+                      -5%
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="150"
+                      step="5"
+                      value={margins.globalDedicatedMarginPct}
+                      onChange={e => updateGlobalDedicatedMargin(Number(e.target.value))}
+                      className="flex-1 accent-emerald-500 h-2 bg-slate-950 rounded-lg cursor-pointer"
+                    />
+                    <button
+                      onClick={() => updateGlobalDedicatedMargin(margins.globalDedicatedMarginPct + 5)}
+                      className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white cursor-pointer"
+                    >
+                      +5%
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
+          )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-2xl bg-slate-950 border border-slate-800">
-              <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Active Subscribers Count</label>
-                <input
-                  type="number"
-                  value={calcSubscribers}
-                  onChange={e => setCalcSubscribers(Number(e.target.value))}
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Avg Retail Plan Rate (₹/mo)</label>
-                <input
-                  type="number"
-                  value={calcAvgHostingPlan}
-                  onChange={e => setCalcAvgHostingPlan(Number(e.target.value))}
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Wholesale Bare-Metal Cost (₹/mo)</label>
-                <input
-                  type="number"
-                  value={calcWholesaleCost}
-                  onChange={e => setCalcWholesaleCost(Number(e.target.value))}
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Live Calculation Output */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
-                <div className="text-[11px] font-bold text-slate-400 uppercase">Gross Revenue / Month</div>
-                <div className="text-2xl font-black text-white mt-1">
-                  {formatPrice(calcSubscribers * calcAvgHostingPlan)}
+          {/* 2. PLAN-BY-PLAN INDIVIDUAL MARGIN CONTROLLER */}
+          {marginSubTab === 'hosting_plans' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                <div className="text-xs text-slate-300">
+                  Adjust individual plan margins and wholesale costs. Every customer order updates instantly!
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-mono">Total Plans: {dynamicHostingPlans.length}</span>
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
-                <div className="text-[11px] font-bold text-slate-400 uppercase">Server Infrastructure Cost</div>
-                <div className="text-2xl font-black text-rose-400 mt-1">
-                  {formatPrice(calcSubscribers * calcWholesaleCost)}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {dynamicHostingPlans.map(plan => {
+                  const planMarginConfig = margins.planMargins[plan.id] || { marginPct: margins.globalHostingMarginPct, wholesaleCostINR: 28 };
+                  const wholesaleCost = planMarginConfig.wholesaleCostINR;
+                  const currentMargin = planMarginConfig.marginPct;
+                  const netProfit = plan.monthlyPriceINR - wholesaleCost;
+
+                  return (
+                    <div key={plan.id} className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 hover:border-emerald-500/40 transition-all flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h4 className="font-extrabold text-base text-white">{plan.name}</h4>
+                            <div className="text-[11px] text-slate-400">{plan.websites} • {plan.storage}</div>
+                          </div>
+                          <span className="text-xs font-extrabold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
+                            +{currentMargin}% MARGIN
+                          </span>
+                        </div>
+
+                        {/* Wholesale vs Selling Price Display */}
+                        <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-2 font-mono">
+                          <div className="flex justify-between items-center text-slate-400">
+                            <span>Wholesale Server Cost:</span>
+                            <div className="flex items-center gap-1">
+                              <span>₹</span>
+                              <input
+                                type="number"
+                                value={wholesaleCost}
+                                onChange={e => updatePlanMargin(plan.id, currentMargin, Math.max(1, Number(e.target.value)))}
+                                className="w-16 p-1 rounded bg-slate-900 border border-slate-700 text-rose-400 font-bold text-right text-xs focus:outline-none"
+                              />
+                              <span>/mo</span>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center text-slate-300">
+                            <span>Retail Selling Price:</span>
+                            <span className="font-bold text-white text-sm">{formatPrice(plan.monthlyPriceINR)}/mo</span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-emerald-400 font-bold pt-1.5 border-t border-slate-800">
+                            <span>Net Profit / Subscriber:</span>
+                            <span className="text-emerald-300 text-sm">+{formatPrice(netProfit)}/mo</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Stepper Controllers for this plan */}
+                      <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                        <div className="flex items-center justify-between text-[11px] text-slate-400">
+                          <span>Adjust Profit %:</span>
+                          <span className="font-mono font-bold text-white">{currentMargin}%</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => updatePlanMargin(plan.id, Math.max(0, currentMargin - 10))}
+                            className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                          >
+                            -10%
+                          </button>
+                          <button
+                            onClick={() => updatePlanMargin(plan.id, Math.max(0, currentMargin - 5))}
+                            className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                          >
+                            -5%
+                          </button>
+                          <input
+                            type="range"
+                            min="0"
+                            max="300"
+                            step="5"
+                            value={currentMargin}
+                            onChange={e => updatePlanMargin(plan.id, Number(e.target.value))}
+                            className="flex-1 accent-emerald-500 h-1.5 bg-slate-950 rounded-lg cursor-pointer"
+                          />
+                          <button
+                            onClick={() => updatePlanMargin(plan.id, currentMargin + 5)}
+                            className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                          >
+                            +5%
+                          </button>
+                          <button
+                            onClick={() => updatePlanMargin(plan.id, currentMargin + 10)}
+                            className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                          >
+                            +10%
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 3. TLD-BY-TLD INDIVIDUAL DOMAIN MARGIN CONTROLLER */}
+          {marginSubTab === 'domains' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                <div className="text-xs text-slate-300">
+                  Configure wholesale registry cost vs retail selling price for all ICANN / NIXI domain extensions (.in, .com, .ai, etc.).
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-cyan-400 font-mono font-bold">100% Real Live Domain Status</span>
                 </div>
               </div>
 
-              <div className="p-4 rounded-2xl bg-emerald-950/50 border border-emerald-500/40">
-                <div className="text-[11px] font-bold text-emerald-300 uppercase">Net Monthly Profit</div>
-                <div className="text-2xl font-black text-emerald-400 mt-1">
-                  {formatPrice(calcSubscribers * (calcAvgHostingPlan - calcWholesaleCost))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {dynamicDomainPricing.map(item => {
+                  const tldMarginConfig = margins.tldMargins[item.tld] || { marginPct: margins.globalDomainMarginPct, wholesaleCostINR: 300 };
+                  const wholesaleCost = tldMarginConfig.wholesaleCostINR;
+                  const currentMargin = tldMarginConfig.marginPct;
+                  const netProfit = item.registerINR - wholesaleCost;
+
+                  return (
+                    <div key={item.tld} className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 hover:border-cyan-500/40 transition-all flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="font-mono font-black text-2xl text-cyan-400">{item.tld}</span>
+                            <div className="text-[10px] text-slate-400 uppercase font-bold">{item.category}</div>
+                          </div>
+                          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono">
+                            +{currentMargin}%
+                          </span>
+                        </div>
+
+                        {/* Cost Breakdown */}
+                        <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-2 font-mono">
+                          <div className="flex justify-between items-center text-slate-400">
+                            <span>Registry Wholesale:</span>
+                            <div className="flex items-center gap-1">
+                              <span>₹</span>
+                              <input
+                                type="number"
+                                value={wholesaleCost}
+                                onChange={e => updateTldMargin(item.tld, currentMargin, Math.max(1, Number(e.target.value)))}
+                                className="w-14 p-1 rounded bg-slate-900 border border-slate-700 text-rose-400 font-bold text-right text-xs focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center text-slate-300">
+                            <span>Retail Sale Price:</span>
+                            <span className="font-bold text-white">{formatPrice(item.registerINR)}/yr</span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-cyan-400 font-bold pt-1.5 border-t border-slate-800">
+                            <span>Net Profit / Domain:</span>
+                            <span className="text-cyan-300 font-bold">+{formatPrice(netProfit)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Stepper Buttons for TLD */}
+                      <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => updateTldMargin(item.tld, Math.max(0, currentMargin - 10))}
+                            className="flex-1 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                          >
+                            -10%
+                          </button>
+                          <button
+                            onClick={() => updateTldMargin(item.tld, Math.max(0, currentMargin - 5))}
+                            className="flex-1 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                          >
+                            -5%
+                          </button>
+                          <button
+                            onClick={() => updateTldMargin(item.tld, currentMargin + 5)}
+                            className="flex-1 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                          >
+                            +5%
+                          </button>
+                          <button
+                            onClick={() => updateTldMargin(item.tld, currentMargin + 10)}
+                            className="flex-1 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+                          >
+                            +10%
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 4. INTERACTIVE PROFIT SIMULATOR */}
+          {marginSubTab === 'simulator' && (
+            <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-6">
+              <div className="font-bold text-base text-white flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-emerald-400" />
+                <span>Interactive Monthly & Annual Net Profit Simulator</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-5 rounded-2xl bg-slate-950 border border-slate-800">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Active Subscribers Count</label>
+                  <input
+                    type="number"
+                    value={calcSubscribers}
+                    onChange={e => setCalcSubscribers(Number(e.target.value))}
+                    className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-sm font-bold text-white focus:outline-none font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Average Retail Plan Rate (₹/mo)</label>
+                  <input
+                    type="number"
+                    value={calcAvgHostingPlan}
+                    onChange={e => setCalcAvgHostingPlan(Number(e.target.value))}
+                    className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-sm font-bold text-white focus:outline-none font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">Wholesale Bare-Metal Cost (₹/mo)</label>
+                  <input
+                    type="number"
+                    value={calcWholesaleCost}
+                    onChange={e => setCalcWholesaleCost(Number(e.target.value))}
+                    className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-sm font-bold text-white focus:outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Simulation Result Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Gross Monthly Revenue (MRR)</div>
+                  <div className="text-2xl font-black text-white mt-1 font-mono">
+                    {formatPrice(calcSubscribers * calcAvgHostingPlan)}
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Server Infrastructure Cost</div>
+                  <div className="text-2xl font-black text-rose-400 mt-1 font-mono">
+                    {formatPrice(calcSubscribers * calcWholesaleCost)}
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-emerald-950/60 border border-emerald-500/40">
+                  <div className="text-[11px] font-bold text-emerald-300 uppercase">Net Monthly Profit (Profit/Mo)</div>
+                  <div className="text-2xl font-black text-emerald-400 mt-1 font-mono">
+                    {formatPrice(calcSubscribers * (calcAvgHostingPlan - calcWholesaleCost))}
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-indigo-950/60 border border-indigo-500/40">
+                  <div className="text-[11px] font-bold text-indigo-300 uppercase">Projected Annual Profit (ARR)</div>
+                  <div className="text-2xl font-black text-indigo-300 mt-1 font-mono">
+                    {formatPrice(calcSubscribers * (calcAvgHostingPlan - calcWholesaleCost) * 12)}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
