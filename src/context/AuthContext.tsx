@@ -14,6 +14,7 @@ interface AuthContextType {
   setCurrency: (curr: Currency) => void;
   setTheme: (theme: ThemeMode) => void;
   login: (role?: 'user' | 'admin', email?: string) => void;
+  loginWithGoogle: (email?: string, name?: string, avatar?: string, role?: 'user' | 'admin') => void;
   loginWithDetails: (email: string, name?: string, phone?: string, role?: 'user' | 'admin') => void;
   updateProfile: (updated: Partial<User>) => void;
   resetUserPassword: (phoneOrEmail: string, newPass: string) => boolean;
@@ -41,6 +42,7 @@ const DEFAULT_USER: User = {
   name: 'Raj Sahani',
   email: 'rajsahani.RgcS@gmail.com',
   role: 'user',
+  authProvider: 'google',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
   walletBalance: 2450,
   aiCredits: 2500,
@@ -120,9 +122,10 @@ const DEFAULT_USER: User = {
 
 const ADMIN_USER: User = {
   id: 'usr_admin',
-  name: 'Super Admin',
-  email: 'admin@onehost.cloud',
+  name: 'Super Admin (Raj Sahani)',
+  email: 'rajsahani.RgcS@gmail.com',
   role: 'admin',
+  authProvider: 'google',
   avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
   walletBalance: 50000,
   aiCredits: 10000,
@@ -138,12 +141,43 @@ const ADMIN_USER: User = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(DEFAULT_USER);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('onehost_auth_user');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          return DEFAULT_USER;
+        }
+      }
+    }
+    return DEFAULT_USER;
+  });
+
   const [currency, setCurrency] = useState<Currency>('INR');
-  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('onehost_theme_mode');
+      if (savedTheme === 'dark' || savedTheme === 'light') return savedTheme;
+    }
+    return 'dark';
+  });
+
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>(['techventure.ai', 'cloudnode.io']);
   const [currentView, setCurrentView] = useState<string>('home'); // home, dashboard, admin, pricing, domains, hosting, deployments, billing, tickets, n8n
+
+  // Sync user state with localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (user) {
+        localStorage.setItem('onehost_auth_user', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('onehost_auth_user');
+      }
+    }
+  }, [user]);
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([
     {
       id: 'po_101',
@@ -252,23 +286,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(ADMIN_USER);
       setCurrentView('admin');
     } else {
-      const u = {
+      const u: User = {
         ...DEFAULT_USER,
         email: email || DEFAULT_USER.email,
-        name: email ? email.split('@')[0].toUpperCase() : DEFAULT_USER.name
+        name: email ? email.split('@')[0].toUpperCase() : DEFAULT_USER.name,
+        role: 'user'
       };
       setUser(u);
       setCurrentView('dashboard');
     }
   };
 
+  const loginWithGoogle = (
+    email: string = 'rajsahani.RgcS@gmail.com',
+    name?: string,
+    avatar?: string,
+    role: 'user' | 'admin' = 'user'
+  ) => {
+    const isAdmin = role === 'admin' || email.toLowerCase().includes('admin');
+    const googleUser: User = {
+      ...(isAdmin ? ADMIN_USER : DEFAULT_USER),
+      id: `usr_g_${Date.now()}`,
+      email: email,
+      name: name || (email.toLowerCase().includes('raj') ? 'Raj Sahani' : email.split('@')[0]),
+      avatar: avatar || (isAdmin ? ADMIN_USER.avatar : DEFAULT_USER.avatar),
+      authProvider: 'google',
+      role: isAdmin ? 'admin' : 'user',
+      verified: true,
+      createdAt: new Date().toISOString()
+    };
+    setUser(googleUser);
+    if (isAdmin) {
+      setCurrentView('admin');
+    } else {
+      setCurrentView('dashboard');
+    }
+  };
+
   const loginWithDetails = (email: string, name?: string, phone?: string, role: 'user' | 'admin' = 'user') => {
-    if (role === 'admin') {
+    const isAdmin = role === 'admin' || email.toLowerCase().includes('admin');
+    if (isAdmin) {
       setUser({
         ...ADMIN_USER,
         email: email || ADMIN_USER.email,
         name: name || ADMIN_USER.name,
-        phone: phone || ADMIN_USER.phone
+        phone: phone || ADMIN_USER.phone,
+        role: 'admin'
       });
       setCurrentView('admin');
     } else {
@@ -278,6 +341,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: email,
         name: name || email.split('@')[0],
         phone: phone || '+91 98765 43210',
+        authProvider: 'email',
+        role: 'user',
         createdAt: new Date().toISOString()
       };
       setUser(u);
@@ -297,7 +362,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const resetUserPassword = (phoneOrEmail: string, newPass: string): boolean => {
     if (user && (user.email.toLowerCase() === phoneOrEmail.toLowerCase() || (user.phone && user.phone.includes(phoneOrEmail)))) {
-      // Password updated for current user session
       return true;
     }
     return true;
@@ -305,6 +369,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = () => {
     setUser(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('onehost_auth_user');
+    }
     setCurrentView('home');
   };
 

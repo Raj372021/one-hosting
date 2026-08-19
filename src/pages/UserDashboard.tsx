@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Gift,
   Home,
+  ArrowLeft,
   Mail,
   Layers,
   Sparkles,
@@ -167,6 +168,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab = 'home
       {/* 1. TOP HEADER BANNER (hPanel Style) */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
+          {/* Dedicated Back to Home Button */}
+          <button
+            onClick={() => setCurrentView('home')}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs flex items-center gap-2 transition-all border border-slate-700 shadow-md cursor-pointer group"
+            title="Return to Main Homepage"
+          >
+            <ArrowLeft className="w-4 h-4 text-purple-400 group-hover:-translate-x-1 transition-transform" />
+            <span className="hidden sm:inline">Back to Home</span>
+            <span className="sm:hidden">Home</span>
+          </button>
+
+          <div className="h-6 w-px bg-slate-800 hidden sm:block" />
+
           <div className="p-2 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30">
             <Server className="w-5 h-5" />
           </div>
@@ -448,10 +462,42 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab = 'home
               <span>Account & Security</span>
             </button>
           </div>
+
+          {/* SIDEBAR FOOTER: RETURN TO HOME */}
+          <div className="pt-4 border-t border-slate-800">
+            <button
+              onClick={() => setCurrentView('home')}
+              className="w-full px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2.5 text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer border border-slate-800 group"
+            >
+              <ArrowLeft className="w-4 h-4 text-purple-400 group-hover:-translate-x-1 transition-transform" />
+              <span>← Back to Homepage</span>
+            </button>
+          </div>
         </aside>
 
         {/* MAIN CONTENT WORKSPACE */}
-        <main className="flex-1 p-4 sm:p-8 overflow-y-auto">
+        <main className="flex-1 p-4 sm:p-8 overflow-y-auto space-y-4">
+          {/* Sub-tab back navigation helper when not on Home Overview */}
+          {sidebarTab !== 'home' && (
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 text-xs">
+              <button
+                onClick={() => setSidebarTab('home')}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 font-bold transition-all cursor-pointer group"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-indigo-400 group-hover:-translate-x-0.5 transition-transform" />
+                <span>← Back to Dashboard Overview</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentView('home')}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1 font-medium"
+              >
+                <Home className="w-3.5 h-3.5 text-purple-400" />
+                <span>Homepage</span>
+              </button>
+            </div>
+          )}
+
           {/* VIEW: HOME OVERVIEW */}
           {sidebarTab === 'home' && (
             <OverviewHomeView

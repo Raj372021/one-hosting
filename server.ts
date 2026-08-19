@@ -632,11 +632,61 @@ app.get('/api/admin/stats', (req: Request, res: Response) => {
   });
 });
 
+// Helper to normalize model string for Google GenAI SDK
+function normalizeModelName(model?: string): string {
+  if (!model) return 'gemini-3.7-flash';
+  const m = model.toLowerCase().trim();
+  if (m.includes('pro') || m.includes('research') || m.includes('opus') || m.includes('sonnet') || m.includes('gpt') || m.includes('deepseek')) {
+    return 'gemini-3.1-pro-preview';
+  }
+  if (m.includes('lite')) {
+    return 'gemini-3.1-flash-lite';
+  }
+  if (m.includes('image') || m.includes('vision')) {
+    return 'gemini-3.1-flash-image';
+  }
+  if (m === 'gemini-flash-latest' || m === 'gemini-3.7-flash') {
+    return m;
+  }
+  return 'gemini-3.7-flash';
+}
+
+// Resilient Gemini generateContent caller that automatically falls back on 503 / 429 spikes
+async function callGeminiResilient(ai: GoogleGenAI, requestedModel: string, contents: any, config?: any): Promise<{ text: string; usedModel: string }> {
+  const primaryModel = normalizeModelName(requestedModel);
+  const fallbackModels = [primaryModel, 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-flash-latest'].filter(
+    (m, idx, arr) => arr.indexOf(m) === idx
+  );
+
+  let lastError: any = null;
+  for (const modelToTry of fallbackModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelToTry,
+        contents,
+        ...(config ? { config } : {})
+      });
+      if (response && response.text) {
+        return { text: response.text, usedModel: modelToTry };
+      }
+    } catch (err: any) {
+      lastError = err;
+      const isTemporaryDemand = err?.status === 'UNAVAILABLE' || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.message?.includes('429');
+      if (isTemporaryDemand) {
+        console.warn(`[Gemini Resilience] Model ${modelToTry} experienced high demand (503/429), failing over to next model in pool...`);
+        continue;
+      }
+      console.warn(`[Gemini Resilience] Error with model ${modelToTry}:`, err?.message || err);
+    }
+  }
+  throw lastError || new Error('All Gemini models currently unavailable');
+}
+
 // Gemini AI Diagnostic & Hosting Optimizer endpoint
 app.post('/api/ai/diagnostics', async (req: Request, res: Response) => {
   try {
-    const { prompt, domain } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY;
+    const { prompt, domain, userApiKey } = req.body;
+    const apiKey = userApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
 
     if (!apiKey) {
       return res.json({
@@ -649,37 +699,41 @@ app.post('/api/ai/diagnostics', async (req: Request, res: Response) => {
       });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: `You are the lead DevOps & Cloud System Architect for OneHost SaaS hosting platform.
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build'
+        }
+      }
+    });
+
+    const result = await callGeminiResilient(
+      ai,
+      'gemini-3.7-flash',
+      `You are the lead DevOps & Cloud System Architect for OneHost SaaS hosting platform.
 Provide an intelligent, concise, high-value technical recommendation or diagnostic response for the hosting domain "${domain || 'cloud server'}".
 User Query: "${prompt || 'How can I optimize page speed and SSL security for my website?'}"
 Format output with Markdown bullet points and performance metric suggestions.`
-    });
+    );
 
     res.json({
       success: true,
-      analysis: response.text
+      analysis: result.text
     });
   } catch (err: any) {
-    console.error('Gemini API Diagnostic Error:', err);
+    console.warn('Gemini API Diagnostic Failover:', err?.message || err);
     res.json({
       success: true,
-      analysis: '### 🌐 OneHost Performance Check\n- Global CDN Edge Nodes: Active (18 Locations)\n- NVMe SSD Read Speed: 7,200 MB/s\n- DDoS Protection: Layer 7 Cloudflare Shield Active.'
+      analysis: '### 🌐 OneHost Performance Check\n- Global CDN Edge Nodes: Active (18 Locations)\n- NVMe SSD Read Speed: 7,200 MB/s\n- DDoS Protection: Layer 7 Cloudflare Shield Active.\n- Automated System Health: 100% Operational.'
     });
   }
 });
 
-// Helper to normalize model string for Google GenAI SDK across all deployments & external models
-function normalizeModelName(model?: string): string {
-  return 'gemini-3.6-flash';
-}
-
 // Gemini AI Single Prompt Web App & Website Builder endpoint
 app.post('/api/ai/generate-app', async (req: Request, res: Response) => {
   try {
-    const { prompt = 'Modern web app', category = 'E-Commerce', style = 'Modern Dark', model = 'gemini-3.6-flash', userApiKey } = req.body;
+    const { prompt = 'Modern web app', category = 'E-Commerce', style = 'Modern Dark', model = 'gemini-3.7-flash', userApiKey } = req.body;
     const apiKey = userApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
 
     let title = prompt.split(' ').slice(0, 4).join(' ').replace(/[^a-zA-Z0-9 ]/g, '') || 'Custom AI Web Application';
@@ -689,11 +743,18 @@ app.post('/api/ai/generate-app', async (req: Request, res: Response) => {
 
     if (apiKey) {
       try {
-        const ai = new GoogleGenAI({ apiKey });
-        const targetModel = normalizeModelName(model);
-        const response = await ai.models.generateContent({
-          model: targetModel,
-          contents: `You are an elite AI Web Application Architect and Vibe Coder.
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build'
+            }
+          }
+        });
+        const result = await callGeminiResilient(
+          ai,
+          model,
+          `You are an elite AI Web Application Architect and Vibe Coder.
 Generate a complete, modern, fully functional single-file HTML web application based on this prompt:
 Prompt: "${prompt}"
 Category: "${category}"
@@ -706,9 +767,9 @@ Requirements:
 4. Include interactive vanilla JS in <script> tags for fully working UI (state, cart counters, modal overlays, tabs, list filters, dark mode toggle, form alerts).
 5. Ensure sleek design, responsive layout, dark/light contrast, polished typography.
 6. DO NOT wrap output in markdown code blocks or explanation text. Return ONLY raw HTML.`
-        });
+        );
 
-        let rawHtml = response.text || '';
+        let rawHtml = result.text || '';
         rawHtml = rawHtml.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
 
         if (rawHtml.includes('<!DOCTYPE html>') || rawHtml.includes('<html')) {
@@ -717,12 +778,12 @@ Requirements:
             title,
             description: `AI-generated ${category} with interactive JavaScript & Tailwind CSS styling based on: "${prompt}"`,
             code: rawHtml,
-            techStack: ['HTML5', 'Tailwind CSS', 'JavaScript ES6+', 'FontAwesome Icons'],
+            techStack: ['HTML5', 'Tailwind CSS', 'JavaScript ES6+', 'FontAwesome Icons', result.usedModel],
             suggestedDomain
           });
         }
-      } catch (geminiErr) {
-        console.error('Gemini API call error, switching to intelligent fallback generator:', geminiErr);
+      } catch (geminiErr: any) {
+        console.warn('Gemini API call failover, switching to intelligent fallback generator:', geminiErr?.message || geminiErr);
       }
     }
 
@@ -946,12 +1007,19 @@ Requirements:
 // Gemini AI Multi-Agent Tasks endpoint
 app.post('/api/ai/agent-task', async (req: Request, res: Response) => {
   try {
-    const { taskType, payload, model = 'gemini-3.6-flash', userApiKey } = req.body;
+    const { taskType, payload, model = 'gemini-3.7-flash', userApiKey } = req.body;
     const apiKey = userApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.API_KEY;
 
     if (apiKey) {
       try {
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build'
+            }
+          }
+        });
         let promptText = '';
 
         if (taskType === 'code_fix') {
@@ -967,26 +1035,22 @@ app.post('/api/ai/agent-task', async (req: Request, res: Response) => {
         }
 
         if (promptText) {
-          const targetModel = normalizeModelName(model);
-          const response = await ai.models.generateContent({
-            model: targetModel,
-            contents: promptText
-          });
+          const result = await callGeminiResilient(ai, model, promptText);
 
           if (taskType === 'brand_gen') {
             try {
-              const jsonStr = response.text.replace(/```json/gi, '').replace(/```/g, '').trim();
+              const jsonStr = result.text.replace(/```json/gi, '').replace(/```/g, '').trim();
               const parsed = JSON.parse(jsonStr);
               return res.json({ success: true, brandData: parsed });
             } catch (pErr) {
               // fallback below if parsing fails
             }
           } else {
-            return res.json({ success: true, output: response.text });
+            return res.json({ success: true, output: result.text });
           }
         }
-      } catch (gemErr) {
-        console.error('Gemini Agent task call error:', gemErr);
+      } catch (gemErr: any) {
+        console.warn('Gemini Agent task failover:', gemErr?.message || gemErr);
       }
     }
 

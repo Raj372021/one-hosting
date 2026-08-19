@@ -1,5 +1,5 @@
 import React from 'react';
-import { Printer, Download, CheckCircle2, Building2, ShieldCheck, X, FileText } from 'lucide-react';
+import { Printer, Download, CheckCircle2, Building2, ShieldCheck, X, FileText, ArrowLeft } from 'lucide-react';
 import { InvoiceItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 
@@ -22,20 +22,29 @@ export const InvoicePdfModal: React.FC<InvoicePdfModalProps> = ({ invoice, onClo
       <div className="relative w-full max-w-2xl bg-white text-slate-900 rounded-3xl shadow-2xl overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
         {/* Top Control Bar (Hidden when printing) */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-2 font-bold text-sm">
-            <FileText className="w-4 h-4 text-indigo-400" />
-            <span>Tax Invoice #{invoice.id}</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition-all"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-purple-400" />
+              <span>← Back</span>
+            </button>
+            <div className="flex items-center gap-1.5 font-bold text-sm ml-2">
+              <FileText className="w-4 h-4 text-indigo-400" />
+              <span>Tax Invoice #{invoice.id}</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Print / Save PDF</span>
             </button>
-            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg">
+            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg cursor-pointer">
               <X className="w-5 h-5" />
             </button>
           </div>

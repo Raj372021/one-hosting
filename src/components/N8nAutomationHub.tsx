@@ -13,6 +13,8 @@ import {
   Globe,
   Plus,
   ArrowRight,
+  ArrowLeft,
+  Home,
   Code2,
   Check,
   Server,
@@ -169,7 +171,36 @@ export const N8nAutomationHub: React.FC<N8nAutomationHubProps> = ({ onPlanSelect
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 sm:p-6">
+    <div className="w-full max-w-7xl mx-auto space-y-6 p-4 sm:p-6">
+      {/* Top Back Navigation Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCurrentView('home')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs transition-all shadow-md cursor-pointer group border border-slate-700"
+          >
+            <ArrowLeft className="w-4 h-4 text-purple-400 group-hover:-translate-x-1 transition-transform" />
+            <span>← Back to Home</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-950/60 hover:bg-indigo-900 text-indigo-300 font-bold text-xs transition-all border border-indigo-800/60 cursor-pointer"
+          >
+            <span>Customer Dashboard</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+          <button onClick={() => setCurrentView('home')} className="hover:text-white transition-colors flex items-center gap-1 cursor-pointer">
+            <Home className="w-3.5 h-3.5" />
+            <span>Home</span>
+          </button>
+          <span className="text-slate-600">/</span>
+          <span className="text-purple-400 font-bold">n8n Automation Studio</span>
+        </div>
+      </div>
+
       {/* HEADER BANNER */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-950 border border-purple-800/40 p-8 shadow-2xl text-slate-100">
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />

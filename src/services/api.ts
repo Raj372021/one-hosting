@@ -24,7 +24,52 @@ function getEffectiveApiKey(userKey?: string): string | null {
 
 // Helper to normalize model string for Google GenAI SDK across all deployments
 function normalizeModelName(model?: string): string {
-  return 'gemini-3.6-flash';
+  if (!model) return 'gemini-3.7-flash';
+  const m = model.toLowerCase().trim();
+  if (m.includes('pro') || m.includes('research') || m.includes('opus') || m.includes('sonnet') || m.includes('gpt') || m.includes('deepseek')) {
+    return 'gemini-3.1-pro-preview';
+  }
+  if (m.includes('lite')) {
+    return 'gemini-3.1-flash-lite';
+  }
+  if (m.includes('image') || m.includes('vision')) {
+    return 'gemini-3.1-flash-image';
+  }
+  if (m === 'gemini-flash-latest' || m === 'gemini-3.7-flash') {
+    return m;
+  }
+  return 'gemini-3.7-flash';
+}
+
+// Resilient Gemini generateContent caller for client that automatically falls back on 503 / 429 spikes
+async function callGeminiResilientClient(ai: GoogleGenAI, requestedModel: string, contents: any, config?: any): Promise<{ text: string; usedModel: string }> {
+  const primaryModel = normalizeModelName(requestedModel);
+  const fallbackModels = [primaryModel, 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-flash-latest'].filter(
+    (m, idx, arr) => arr.indexOf(m) === idx
+  );
+
+  let lastError: any = null;
+  for (const modelToTry of fallbackModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelToTry,
+        contents,
+        ...(config ? { config } : {})
+      });
+      if (response && response.text) {
+        return { text: response.text, usedModel: modelToTry };
+      }
+    } catch (err: any) {
+      lastError = err;
+      const isTemporaryDemand = err?.status === 'UNAVAILABLE' || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.message?.includes('429');
+      if (isTemporaryDemand) {
+        console.warn(`[Client Gemini Resilience] Model ${modelToTry} experienced high demand (503/429), failing over to next model...`);
+        continue;
+      }
+      console.warn(`[Client Gemini Resilience] Error with model ${modelToTry}:`, err?.message || err);
+    }
+  }
+  throw lastError || new Error('All Gemini models currently unavailable');
 }
 
 import { loadSavedMarginSettings, getCalculatedTldPrice, DEFAULT_TLD_MARGINS } from './marginService';
@@ -424,12 +469,12 @@ export async function fetchAdminStats(): Promise<AdminStats | null> {
   }
 }
 
-export async function runAiDiagnostic(prompt: string, domain?: string): Promise<string> {
+export async function runAiDiagnostic(prompt: string, domain?: string, userApiKey?: string): Promise<string> {
   try {
     const res = await fetch('/api/ai/diagnostics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, domain })
+      body: JSON.stringify({ prompt, domain, userApiKey: userApiKey || getEffectiveApiKey() })
     });
     if (res.ok) {
       const data = await res.json();
@@ -440,15 +485,23 @@ export async function runAiDiagnostic(prompt: string, domain?: string): Promise<
   }
 
   // Client side fallback for diagnostics
-  const apiKey = getEffectiveApiKey();
+  const apiKey = getEffectiveApiKey(userApiKey);
   if (apiKey) {
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      const resp = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: `You are an expert server engineer. Analyze this request and provide diagnostic report: ${prompt}`
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
       });
-      return resp.text || 'Diagnostic completed.';
+      const result = await callGeminiResilientClient(
+        ai,
+        'gemini-3.7-flash',
+        `You are an expert server engineer. Analyze this request and provide diagnostic report: ${prompt}`
+      );
+      return result.text || 'Diagnostic completed.';
     } catch (err: any) {
       console.warn('Browser direct Gemini diagnostic error:', err);
     }
@@ -474,17 +527,25 @@ export async function generateAiApp(payload: { prompt: string; category?: string
 
   // Client-side fallback via @google/genai directly in browser!
   const apiKey = getEffectiveApiKey(payload.userApiKey);
-  const targetModel = payload.model || 'gemini-3.6-flash';
+  const targetModel = payload.model || 'gemini-3.7-flash';
 
   let title = payload.prompt.split(' ').slice(0, 4).join(' ').replace(/[^a-zA-Z0-9 ]/g, '') || 'Custom AI Application';
   title = title.charAt(0).toUpperCase() + title.slice(1);
 
   if (apiKey) {
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: normalizeModelName(targetModel),
-        contents: `You are an elite AI Web Application Architect and Vibe Coder.
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+      const result = await callGeminiResilientClient(
+        ai,
+        targetModel,
+        `You are an elite AI Web Application Architect and Vibe Coder.
 Generate a complete, modern, fully functional single-file HTML web application based on this prompt:
 Prompt: "${payload.prompt}"
 Category: "${payload.category || 'E-Commerce'}"
@@ -495,22 +556,22 @@ CRITICAL REQUIREMENTS:
 2. Include CDN links for Tailwind CSS (https://cdn.tailwindcss.com) and FontAwesome / Lucide icons.
 3. Include realistic interactive features (e.g. state management, add to cart, filter, modals, dynamic UI elements).
 4. Do NOT wrap code in markdown code blocks or backticks. Return raw HTML starting directly with <!DOCTYPE html>.`
-      });
+      );
 
-      let code = response.text || '';
+      let code = result.text || '';
       code = code.replace(/^```html/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();
 
       if (code) {
         return {
           title,
-          description: `Custom generated ${payload.category || 'Web Application'} with ${payload.style || 'Modern'} theme using ${targetModel}.`,
+          description: `Custom generated ${payload.category || 'Web Application'} with ${payload.style || 'Modern'} theme using ${result.usedModel}.`,
           code,
-          techStack: ['HTML5', 'Tailwind CSS', 'JavaScript ES6+', targetModel],
+          techStack: ['HTML5', 'Tailwind CSS', 'JavaScript ES6+', result.usedModel],
           suggestedDomain: `${title.toLowerCase().replace(/\s+/g, '')}.in`
         };
       }
     } catch (clientErr: any) {
-      console.warn('Client-side Gemini generation error:', clientErr);
+      console.warn('Client-side Gemini generation failover:', clientErr?.message || clientErr);
     }
   }
 
@@ -711,11 +772,18 @@ export async function runAiAgentTask(taskType: string, payload: any, model?: str
 
   // Client-side fallback via @google/genai
   const apiKey = getEffectiveApiKey(userApiKey);
-  const targetModel = model || 'gemini-3.6-flash';
+  const targetModel = model || 'gemini-3.7-flash';
 
   if (apiKey) {
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
       let promptText = '';
       if (taskType === 'code_fix') promptText = `Fix bugs & refactor: ${payload.code}`;
       else if (taskType === 'db_gen') promptText = `Generate SQL DDL & API routes for: ${payload.prompt}`;
@@ -723,14 +791,11 @@ export async function runAiAgentTask(taskType: string, payload: any, model?: str
       else if (taskType === 'security_audit') promptText = `Perform OWASP security scan report for ${payload.target}`;
 
       if (promptText) {
-        const response = await ai.models.generateContent({
-          model: normalizeModelName(targetModel),
-          contents: promptText
-        });
-        return { output: response.text || 'Task completed.' };
+        const result = await callGeminiResilientClient(ai, targetModel, promptText);
+        return { output: result.text || 'Task completed.' };
       }
     } catch (err: any) {
-      console.warn('Client-side agent task error:', err);
+      console.warn('Client-side agent task failover:', err?.message || err);
     }
   }
 

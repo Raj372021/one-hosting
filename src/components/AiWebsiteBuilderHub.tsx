@@ -49,7 +49,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { generateAiApp, runAiAgentTask, deployApplication } from '../services/api';
+import { generateAiApp, runAiAgentTask, deployApplication, runAiDiagnostic } from '../services/api';
 import { pushProjectToGithub } from '../services/githubService';
 import { RazorpayModal } from './RazorpayModal';
 
@@ -65,21 +65,20 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
   
   // Google AI Studio Models from Chat Settings
   const [selectedModel, setSelectedModel] = useState<
-    | 'gemini-3.6-flash'
-    | 'gemini-3.5-flash-lite'
-    | 'gemini-3.5-flash'
+    | 'gemini-3.7-flash'
     | 'gemini-3.1-pro-preview'
     | 'gemini-3.1-flash-lite'
-    | 'gemini-3-flash-preview'
-    | 'gemini-2.5-pro'
-    | 'gemini-2.5-flash'
+    | 'gemini-flash-latest'
     | 'gemini-deep-research'
-  >('gemini-3.6-flash');
+    | string
+  >('gemini-3.7-flash');
 
   // Google API Key State & Storage
   const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem('onehost_google_api_key') || '');
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [tempApiKey, setTempApiKey] = useState(userApiKey);
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [keyTestResult, setKeyTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // AI Credit Modal State & Discount Timer
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
@@ -114,6 +113,8 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
   const [isBuildingApp, setIsBuildingApp] = useState(false);
   const [agentLogs, setAgentLogs] = useState<string[]>([]);
   const [agentProgressPct, setAgentProgressPct] = useState(0);
+  const [liveStreamingCode, setLiveStreamingCode] = useState<string>('');
+  const [codeSlimMode, setCodeSlimMode] = useState<boolean>(true);
   const [generatedApp, setGeneratedApp] = useState<{
     title: string;
     description: string;
@@ -629,6 +630,29 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
     setIsApiKeyModalOpen(false);
   };
 
+  const handleTestApiKey = async () => {
+    const keyToTest = tempApiKey.trim() || userApiKey.trim();
+    if (!keyToTest) {
+      showToast('Please enter or paste an API key to test.', 'error');
+      return;
+    }
+    setIsTestingKey(true);
+    setKeyTestResult(null);
+    try {
+      const report = await runAiDiagnostic('Test connection and model response', 'api-test.onehost.cloud', keyToTest);
+      setIsTestingKey(false);
+      if (report && !report.toLowerCase().includes('failed')) {
+        setKeyTestResult({ success: true, message: 'Google Gemini API key is valid and connected successfully!' });
+        showToast('Gemini API key verified successfully!', 'success');
+      } else {
+        setKeyTestResult({ success: false, message: 'Could not verify API key. Please check the key format.' });
+      }
+    } catch (err: any) {
+      setIsTestingKey(false);
+      setKeyTestResult({ success: false, message: err?.message || 'Verification failed. Please check key validity.' });
+    }
+  };
+
   // Handler for Website & App Generation with Stream Logs
   const handleGenerateApp = async (targetType: 'website' | 'app' = 'app', e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -649,7 +673,8 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
     setIsBuildingApp(true);
     setDeployedUrl(null);
     setPushedGithubUrl(null);
-    setAgentProgressPct(15);
+    setAgentProgressPct(5);
+    setLiveStreamingCode('<!DOCTYPE html>\n<html lang="en" class="dark">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <script src="https://cdn.tailwindcss.com"></script>\n  <title>OneHost AI Synthesizer</title>\n</head>');
     const targetLabel = targetType === 'website' ? '🌐 Responsive Full Website' : '📱 Interactive Web App & SaaS';
     setAgentLogs([
       `[00:01] 🧠 AI Agent Initialized: Using model "${selectedModel}"`,
@@ -657,9 +682,25 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
       `[00:03] 🏗️ Generating DOM hierarchy, responsive viewport rules & Tailwind utility grid...`
     ]);
 
+    const codeChunks = [
+      '\n<body class="bg-[#05050C] text-slate-100 font-sans min-h-screen antialiased flex flex-col">\n  <!-- Top Modern Header & Navigation -->\n  <header class="sticky top-0 z-50 backdrop-blur-xl bg-slate-950/80 border-b border-purple-500/20">\n    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">',
+      '\n      <div class="flex items-center gap-3">\n        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-cyan-400 flex items-center justify-center font-black text-white shadow-lg">⚡</div>\n        <span class="font-extrabold text-base tracking-tight text-white">' + (appCategory || 'OneHost App') + '</span>\n      </div>',
+      '\n      <div class="flex items-center gap-3">\n        <button class="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-md">Action</button>\n      </div>\n    </div>\n  </header>',
+      '\n  <!-- Dynamic Hero & Interactive Feature Components -->\n  <main class="flex-1 max-w-6xl mx-auto px-6 py-12">\n    <section class="text-center py-8">\n      <h1 class="text-4xl sm:text-6xl font-black text-white tracking-tight leading-tight">AI Generated <span class="bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">Live Application</span></h1>\n    </section>\n  </main>',
+      '\n  <!-- State & Interactive Handlers -->\n  <script>\n    document.addEventListener("DOMContentLoaded", () => {\n      console.log("⚡ AI Engine Active - ' + selectedModel + '");\n    });\n  </script>\n</body>\n</html>'
+    ];
+
+    let chunkIdx = 0;
     const logTimer = setInterval(() => {
-      setAgentProgressPct(prev => (prev < 85 ? prev + 15 : prev));
-    }, 450);
+      setAgentProgressPct(prev => {
+        const nextPct = prev < 85 ? prev + 15 : prev;
+        if (chunkIdx < codeChunks.length) {
+          setLiveStreamingCode(prevCode => prevCode + codeChunks[chunkIdx]);
+          chunkIdx++;
+        }
+        return nextPct;
+      });
+    }, 400);
 
     try {
       const augmentedPrompt = targetType === 'website'
@@ -679,6 +720,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
       if (res && res.code) {
         setGeneratedApp(res);
+        setLiveStreamingCode(res.code);
         setGithubRepoName(res.title.toLowerCase().replace(/[^a-z0-9]/g, '-'));
         setAgentLogs(prev => [
           ...prev,
@@ -1007,6 +1049,26 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
         {/* MODEL SELECTOR & CREDIT BALANCE MONETIZATION */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Custom Google API Key Trigger Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setTempApiKey(userApiKey);
+              setKeyTestResult(null);
+              setIsApiKeyModalOpen(true);
+            }}
+            className={`px-3.5 py-2 rounded-xl border text-xs font-black flex items-center gap-2 transition-all shadow-md cursor-pointer ${
+              userApiKey
+                ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 hover:bg-emerald-900/90 shadow-emerald-900/20'
+                : 'bg-gradient-to-r from-purple-900/90 to-indigo-900/90 border-purple-500/50 hover:border-purple-400 text-purple-200 hover:text-white shadow-purple-900/20'
+            }`}
+            title="Configure your Google AI Studio Gemini API key"
+          >
+            <Key className={`w-3.5 h-3.5 ${userApiKey ? 'text-emerald-400' : 'text-amber-400'}`} />
+            <span>{userApiKey ? `API Key: ${userApiKey.slice(0, 6)}...` : '🔑 Add Your API Key'}</span>
+            <span className={`w-2 h-2 rounded-full ${userApiKey ? 'bg-emerald-400 animate-pulse' : 'bg-purple-400'}`} />
+          </button>
+
           {/* Model Switcher */}
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-1.5 flex items-center gap-1 text-xs">
             <Cpu className="w-4 h-4 text-purple-400 ml-1" />
@@ -1015,17 +1077,11 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
               onChange={(e: any) => setSelectedModel(e.target.value)}
               className="bg-transparent text-slate-200 font-semibold focus:outline-none text-xs cursor-pointer pr-1"
             >
-              <option value="grok-4.6-high-fast" className="bg-slate-900 text-amber-300">⚡ Cursor Grok 4.6 High Fast (NEW) (300 Credits)</option>
-              <option value="composer-2.5-fast" className="bg-slate-900 text-purple-300">🚀 Composer 2.5 Fast (250 Credits)</option>
-              <option value="sonnet-5-high" className="bg-slate-900 text-white">✨ Sonnet 5 High (500 Credits)</option>
-              <option value="opus-5-high" className="bg-slate-900 text-white">🧠 Opus 5 High (800 Credits)</option>
-              <option value="gpt-5.6-sol" className="bg-slate-900 text-cyan-300">🌐 GPT-5.6 Sol Medium (400 Credits)</option>
-              <option value="gpt-5.6-terra" className="bg-slate-900 text-emerald-300">🌱 GPT-5.6 Terra Medium (350 Credits)</option>
-              <option value="fable-5-high" className="bg-slate-900 text-pink-300">🎨 Fable 5 High (450 Credits)</option>
-              <option value="grok-4.5-high" className="bg-slate-900 text-amber-400">🔥 Cursor Grok 4.5 High (300 Credits)</option>
-              <option value="gemini-2.5-pro" className="bg-slate-900 text-white">Gemini 2.5 Pro Vibe Coder (1,000 Credits)</option>
-              <option value="gemini-2.5-flash" className="bg-slate-900 text-white">Gemini 2.5 Flash Ultra Coder (500 Credits)</option>
-              <option value="gemini-deep-research" className="bg-slate-900 text-white">Gemini Deep Research Agent (1,500 Credits)</option>
+              <option value="gemini-3.7-flash" className="bg-slate-900 text-emerald-300">⚡ Gemini 3.7 Flash (Recommended) (100 Credits)</option>
+              <option value="gemini-3.1-pro-preview" className="bg-slate-900 text-purple-300">🧠 Gemini 3.1 Pro Preview (Reasoning) (300 Credits)</option>
+              <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-cyan-300">🚀 Gemini 3.1 Flash Lite (High Speed) (50 Credits)</option>
+              <option value="gemini-flash-latest" className="bg-slate-900 text-amber-300">✨ Gemini Flash Latest (100 Credits)</option>
+              <option value="gemini-deep-research" className="bg-slate-900 text-pink-300">🔍 Gemini Deep Research (500 Credits)</option>
             </select>
           </div>
 
@@ -1204,15 +1260,11 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                           onChange={(e: any) => setSelectedModel(e.target.value)}
                           className="bg-transparent text-purple-200 font-bold focus:outline-none text-[11px] cursor-pointer pr-1 truncate max-w-[170px]"
                         >
-                          <option value="gemini-3.6-flash" className="bg-slate-900 text-white">Gemini 3.6 Flash</option>
-                          <option value="gemini-3.5-flash-lite" className="bg-slate-900 text-white">Gemini 3.5 Flash Lite</option>
-                          <option value="gemini-3.5-flash" className="bg-slate-900 text-white">Gemini 3.5 Flash</option>
-                          <option value="gemini-3.1-pro-preview" className="bg-slate-900 text-white">Gemini 3.1 Pro Preview</option>
-                          <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-white">Gemini 3.1 Flash Lite</option>
-                          <option value="gemini-3-flash-preview" className="bg-slate-900 text-white">Gemini 3 Flash Preview</option>
-                          <option value="gemini-2.5-pro" className="bg-slate-900 text-white">Gemini 2.5 Pro Vibe Coder</option>
-                          <option value="gemini-2.5-flash" className="bg-slate-900 text-white">Gemini 2.5 Flash</option>
-                          <option value="gemini-deep-research" className="bg-slate-900 text-white">Gemini Deep Research</option>
+                          <option value="gemini-3.7-flash" className="bg-slate-900 text-emerald-300">⚡ Gemini 3.7 Flash</option>
+                          <option value="gemini-3.1-pro-preview" className="bg-slate-900 text-purple-300">🧠 Gemini 3.1 Pro Preview</option>
+                          <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-cyan-300">🚀 Gemini 3.1 Flash Lite</option>
+                          <option value="gemini-flash-latest" className="bg-slate-900 text-amber-300">✨ Gemini Flash Latest</option>
+                          <option value="gemini-deep-research" className="bg-slate-900 text-pink-300">🔍 Gemini Deep Research</option>
                         </select>
                       </div>
                     </div>
@@ -1416,87 +1468,85 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
             {(() => {
               const activeApp = generatedApp || defaultStarterApp;
               return (
-                <div className="space-y-3 bg-slate-950 border-2 border-purple-500/40 rounded-3xl p-4 shadow-2xl relative overflow-hidden">
-                  {/* PREVIEW TOP TOOLBAR */}
-                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5">
+                <div className="space-y-2.5 bg-slate-950 border border-purple-500/30 rounded-2xl p-2.5 sm:p-3.5 shadow-2xl relative overflow-hidden">
+                  {/* PREVIEW TOP TOOLBAR - COMPACT & STREAMLINED */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 bg-slate-900/90 border border-slate-800 rounded-xl px-2.5 py-1.5">
                     {/* APP TITLE & LIVE BADGE */}
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 shrink-0">
-                        <Globe className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 shrink-0">
+                        <Globe className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                          <h3 className="text-xs sm:text-sm font-black text-white truncate max-w-[180px] sm:max-w-xs">{activeApp.title}</h3>
-                          <span className="text-[9px] bg-purple-950 text-purple-300 font-mono font-bold px-2 py-0.5 rounded-full border border-purple-800/60 shrink-0">
-                            {generatedApp ? 'AI Live' : 'Sandbox Preview'}
-                          </span>
-                        </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                        <h3 className="text-xs font-bold text-white truncate max-w-[150px] sm:max-w-[220px]">{activeApp.title}</h3>
+                        <span className="text-[8px] bg-purple-950/80 text-purple-300 font-mono font-bold px-1.5 py-0.2 rounded border border-purple-800/50 shrink-0">
+                          {generatedApp ? 'AI Live' : 'Preview'}
+                        </span>
                       </div>
                     </div>
 
                     {/* CONTROLS: DEVICE VIEWPORT SWITCHER + VIEW MODE + ACTIONS */}
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1">
                       {/* DEVICE VIEWPORT BUTTONS: COMPUTER, TABLET, MOBILE */}
-                      <div className="flex items-center gap-0.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                      <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
                         <button
                           type="button"
                           onClick={() => setPreviewViewport('desktop')}
-                          className={`px-2 py-1 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all ${
-                            previewViewport === 'desktop' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            previewViewport === 'desktop' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
                           }`}
                           title="Computer Viewport (100%)"
                         >
-                          <Monitor className="w-3 h-3 text-cyan-300" />
+                          <Monitor className="w-2.5 h-2.5 text-cyan-300" />
                           <span>Computer</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setPreviewViewport('tablet')}
-                          className={`px-2 py-1 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all ${
-                            previewViewport === 'tablet' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            previewViewport === 'tablet' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
                           }`}
                           title="Tablet Viewport (768px)"
                         >
-                          <Tablet className="w-3 h-3 text-amber-300" />
+                          <Tablet className="w-2.5 h-2.5 text-amber-300" />
                           <span>Tablet</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setPreviewViewport('mobile')}
-                          className={`px-2 py-1 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all ${
-                            previewViewport === 'mobile' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            previewViewport === 'mobile' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
                           }`}
                           title="Mobile Viewport (375px)"
                         >
-                          <Smartphone className="w-3 h-3 text-pink-300" />
+                          <Smartphone className="w-2.5 h-2.5 text-pink-300" />
                           <span>Mobile</span>
                         </button>
                       </div>
 
                       {/* LIVE PREVIEW VS SOURCE CODE TOGGLE */}
-                      <div className="flex items-center gap-0.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                      <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
                         <button
                           type="button"
                           onClick={() => setPreviewViewMode('preview')}
-                          className={`px-2 py-1 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all ${
-                            previewViewMode === 'preview' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            previewViewMode === 'preview' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          <Eye className="w-3 h-3" />
+                          <Eye className="w-2.5 h-2.5" />
                           <span>Preview</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setPreviewViewMode('code')}
-                          className={`px-2 py-1 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all ${
-                            previewViewMode === 'code' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            previewViewMode === 'code' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          <Code className="w-3 h-3" />
+                          <Code className="w-2.5 h-2.5" />
                           <span>Code</span>
                         </button>
                       </div>
@@ -1505,28 +1555,53 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                       <button
                         type="button"
                         onClick={() => setIsFullscreenPreview(true)}
-                        className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all"
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer"
                         title="Fullscreen Live Preview"
                       >
-                        <Maximize2 className="w-3.5 h-3.5" />
+                        <Maximize2 className="w-3 h-3" />
                       </button>
 
                       <button
                         type="button"
                         onClick={() => downloadCodeFile(`${activeApp.title.toLowerCase().replace(/\s+/g, '-')}.html`, activeApp.code)}
-                        className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 transition-all"
+                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 transition-all cursor-pointer"
                         title="Download HTML Code File"
                       >
-                        <Download className="w-3.5 h-3.5" />
+                        <Download className="w-3 h-3" />
                       </button>
+
+                      {/* MINI AI CODING STREAMER & STANDING VERTICAL PERCENTAGE LINE NEAR DEPLOY BUTTON */}
+                      <div className="flex items-center gap-1.5 bg-[#05060e] border border-purple-500/40 px-2 py-0.5 rounded-lg shadow-sm">
+                        {/* Mini Code Ticker in Slim Font */}
+                        <div className="flex items-center gap-1 max-w-[130px] sm:max-w-[180px] overflow-hidden text-[9px] font-mono">
+                          <Code className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+                          <span className="text-cyan-300 font-light truncate tracking-tight">
+                            {isBuildingApp ? (liveStreamingCode.split('\n').pop() || '<div class="flex...">') : 'index.html'}
+                          </span>
+                        </div>
+
+                        {/* Standing Vertical Percentage Line (Khadi Line - Top to Bottom on Right Side) */}
+                        <div className="flex items-center gap-1 pl-1.5 border-l border-slate-800 shrink-0 select-none">
+                          <div className="w-1.5 h-5 bg-slate-900 rounded-full relative overflow-hidden flex flex-col justify-start border border-slate-800" title={`Progress: ${agentProgressPct}%`}>
+                            <div
+                              className="w-full bg-gradient-to-b from-cyan-400 via-indigo-500 to-purple-500 rounded-full transition-all duration-300 shadow-[0_0_6px_rgba(34,211,238,0.9)]"
+                              style={{ height: `${agentProgressPct || (generatedApp ? 100 : 100)}%` }}
+                            />
+                          </div>
+                          <span className="font-mono text-[9px] font-extrabold text-cyan-300">
+                            {agentProgressPct || (generatedApp ? 100 : 100)}%
+                          </span>
+                          {isBuildingApp && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />}
+                        </div>
+                      </div>
 
                       <button
                         type="button"
                         onClick={handleDeployGeneratedApp}
                         disabled={isDeployingGenerated}
-                        className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold text-[11px] shadow-md flex items-center gap-1 transition-all"
+                        className="px-2 py-0.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-[10px] shadow-sm flex items-center gap-1 transition-all cursor-pointer"
                       >
-                        <Globe className="w-3.5 h-3.5" />
+                        <Globe className="w-3 h-3" />
                         <span>{isDeployingGenerated ? 'Deploying...' : 'Deploy'}</span>
                       </button>
 
@@ -1539,11 +1614,11 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                           }
                           setIsGithubModalOpen(true);
                         }}
-                        className="px-3 py-1.5 rounded-xl bg-purple-950/90 hover:bg-purple-900 border border-purple-500/40 text-purple-200 font-extrabold text-[11px] shadow-sm flex items-center gap-1.5 transition-all"
+                        className="px-2 py-0.5 rounded-lg bg-purple-950 hover:bg-purple-900 border border-purple-500/40 text-purple-200 font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer"
                         title="Push Project Source Code to GitHub Account"
                       >
-                        <Github className="w-3.5 h-3.5 text-purple-400" />
-                        <span>Push to GitHub</span>
+                        <Github className="w-3 h-3 text-purple-400" />
+                        <span>GitHub</span>
                       </button>
                     </div>
                   </div>
@@ -1551,31 +1626,26 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                   {/* PREVIEW CONTAINER / RENDER AREA WITH REAL DEVICE FRAMES */}
                   {previewViewMode === 'preview' ? (
                     previewViewport === 'mobile' ? (
-                      <div className="w-full bg-slate-950/90 p-4 border border-slate-800/80 rounded-2xl flex flex-col items-center justify-center overflow-x-auto shadow-inner min-h-[580px]">
-                        <div className="text-center mb-3">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/10 border border-pink-500/30 text-pink-300 text-[11px] font-bold">
-                            <Smartphone className="w-3.5 h-3.5 text-pink-400" />
-                            <span>Smartphone Real Viewport • 375 × 667 px</span>
+                      <div className="w-full bg-slate-950/90 p-2 sm:p-4 border border-slate-800/80 rounded-2xl flex flex-col items-center justify-center overflow-x-auto shadow-inner min-h-[600px]">
+                        <div className="text-center mb-2">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pink-500/10 border border-pink-500/30 text-pink-300 text-[10px] font-bold">
+                            <Smartphone className="w-3 h-3 text-pink-400" />
+                            <span>Mobile • 375 × 667 px</span>
                           </div>
                         </div>
 
                         {/* REAL SMARTPHONE CASING */}
-                        <div className="relative w-[370px] max-w-full rounded-[44px] bg-slate-900 p-3 border-[6px] border-slate-700/90 shadow-[0_25px_60px_rgba(0,0,0,0.9)] ring-1 ring-slate-600/40 flex flex-col items-center">
-                          {/* Side Buttons simulation */}
-                          <div className="absolute -left-[9px] top-20 w-[3px] h-8 bg-slate-700 rounded-l-sm" />
-                          <div className="absolute -left-[9px] top-32 w-[3px] h-8 bg-slate-700 rounded-l-sm" />
-                          <div className="absolute -right-[9px] top-24 w-[3px] h-12 bg-slate-700 rounded-r-sm" />
-
+                        <div className="relative w-[370px] max-w-full rounded-[38px] bg-slate-900 p-2.5 border-[4px] border-slate-700/90 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col items-center">
                           {/* Top Dynamic Island / Notch */}
-                          <div className="w-28 h-5 bg-black rounded-full border border-slate-800/80 flex items-center justify-between px-3 mb-2 shadow-inner z-10">
-                            <div className="w-2.5 h-2.5 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center">
+                          <div className="w-24 h-4 bg-black rounded-full border border-slate-800 flex items-center justify-between px-2.5 mb-1.5 shadow-inner z-10">
+                            <div className="w-2 h-2 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center">
                               <div className="w-1 h-1 rounded-full bg-blue-900/80" />
                             </div>
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 animate-pulse" />
+                            <div className="w-1 h-1 rounded-full bg-emerald-500/80 animate-pulse" />
                           </div>
 
                           {/* Screen Iframe Area */}
-                          <div className="w-full h-[520px] bg-black rounded-[32px] overflow-hidden border border-slate-800 shadow-inner relative">
+                          <div className="w-full h-[540px] bg-black rounded-[28px] overflow-hidden border border-slate-800 shadow-inner relative">
                             <iframe
                               srcDoc={activeApp.code}
                               title="Mobile Application Preview"
@@ -1585,29 +1655,28 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                           </div>
 
                           {/* Home Indicator Bar */}
-                          <div className="w-32 h-1 bg-slate-500/70 rounded-full mt-2.5 mb-1" />
+                          <div className="w-28 h-1 bg-slate-500/70 rounded-full mt-2 mb-0.5" />
                         </div>
                       </div>
                     ) : previewViewport === 'tablet' ? (
-                      <div className="w-full bg-slate-950/90 p-4 border border-slate-800/80 rounded-2xl flex flex-col items-center justify-center overflow-x-auto shadow-inner min-h-[580px]">
-                        <div className="text-center mb-3">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-bold">
-                            <Tablet className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Tablet Device Viewport • 768 × 1024 px</span>
+                      <div className="w-full bg-slate-950/90 p-2 sm:p-4 border border-slate-800/80 rounded-2xl flex flex-col items-center justify-center overflow-x-auto shadow-inner min-h-[600px]">
+                        <div className="text-center mb-2">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+                            <Tablet className="w-3 h-3 text-amber-400" />
+                            <span>Tablet • 768 × 1024 px</span>
                           </div>
                         </div>
 
                         {/* REAL TABLET CASING */}
-                        <div className="relative w-[720px] max-w-full rounded-[32px] bg-slate-900 p-4 border-[6px] border-slate-700/90 shadow-[0_25px_60px_rgba(0,0,0,0.9)] ring-1 ring-slate-600/40 flex flex-col items-center">
-                          {/* Top Tablet Camera Bezel */}
-                          <div className="w-full flex items-center justify-center gap-2 mb-2">
-                            <div className="w-2.5 h-2.5 rounded-full bg-black border border-slate-700 flex items-center justify-center">
+                        <div className="relative w-[720px] max-w-full rounded-[26px] bg-slate-900 p-3 border-[4px] border-slate-700/90 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex flex-col items-center">
+                          <div className="w-full flex items-center justify-center gap-2 mb-1.5">
+                            <div className="w-2 h-2 rounded-full bg-black border border-slate-700 flex items-center justify-center">
                               <div className="w-1 h-1 rounded-full bg-blue-900" />
                             </div>
                           </div>
 
                           {/* Screen Iframe Area */}
-                          <div className="w-full h-[520px] bg-black rounded-xl overflow-hidden border border-slate-800 shadow-inner">
+                          <div className="w-full h-[540px] bg-black rounded-xl overflow-hidden border border-slate-800 shadow-inner">
                             <iframe
                               srcDoc={activeApp.code}
                               title="Tablet Application Preview"
@@ -1616,43 +1685,42 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                             />
                           </div>
 
-                          {/* Bottom Home Indicator */}
-                          <div className="w-36 h-1 bg-slate-600/70 rounded-full mt-3 mb-0.5" />
+                          <div className="w-32 h-1 bg-slate-600/70 rounded-full mt-2" />
                         </div>
                       </div>
                     ) : (
-                      <div className="w-full bg-slate-950/90 p-3 border border-slate-800/80 rounded-2xl flex flex-col items-center overflow-x-auto shadow-inner min-h-[580px]">
-                        <div className="w-full text-center mb-2 flex items-center justify-between px-2">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-[11px] font-bold">
-                            <Monitor className="w-3.5 h-3.5 text-cyan-400" />
-                            <span>Computer Monitor / macOS Browser Viewport • 100% Full Width</span>
+                      <div className="w-full bg-slate-950/90 p-1.5 sm:p-2 border border-slate-800/80 rounded-2xl flex flex-col items-center overflow-x-auto shadow-inner min-h-[600px]">
+                        <div className="w-full text-center mb-1.5 flex items-center justify-between px-2">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold">
+                            <Monitor className="w-3 h-3 text-cyan-400" />
+                            <span>Computer Viewport • 100% Canvas</span>
                           </div>
-                          <span className="text-[10px] text-slate-500 font-mono">1920 × 1080 Responsive</span>
+                          <span className="text-[9px] text-slate-500 font-mono">1920 × 1080 Responsive</span>
                         </div>
 
                         {/* REAL COMPUTER MONITOR & BROWSER CASING */}
-                        <div className="w-full rounded-2xl bg-slate-900 border-2 border-slate-700/80 shadow-2xl overflow-hidden flex flex-col">
-                          {/* Mac-style Window Top Header */}
-                          <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex items-center justify-between gap-3 text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="w-3 h-3 rounded-full bg-rose-500 inline-block shadow-sm"></span>
-                              <span className="w-3 h-3 rounded-full bg-amber-500 inline-block shadow-sm"></span>
-                              <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
+                        <div className="w-full rounded-xl bg-slate-900 border border-slate-700/80 shadow-2xl overflow-hidden flex flex-col">
+                          {/* Mac-style Window Top Header - Ultra Slim */}
+                          <div className="bg-slate-950 px-3 py-1.5 border-b border-slate-800 flex items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-sm"></span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block shadow-sm"></span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
                             </div>
 
                             {/* URL Address Bar */}
-                            <div className="flex-1 max-w-xl mx-auto px-3 py-1 rounded-xl bg-slate-900 border border-slate-800 flex items-center gap-2 text-slate-400 text-[11px] font-mono">
+                            <div className="flex-1 max-w-lg mx-auto px-2.5 py-0.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-1.5 text-slate-400 text-[10px] font-mono">
                               <span className="text-emerald-400 font-bold">🔒 https://</span>
                               <span className="text-slate-200 font-semibold">{activeApp.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.onehost.cloud</span>
                             </div>
 
-                            <div className="text-[11px] font-bold text-slate-400 font-mono">
-                              Desktop Studio
+                            <div className="text-[10px] font-bold text-slate-500 font-mono">
+                              Desktop
                             </div>
                           </div>
 
-                          {/* Screen Iframe Area */}
-                          <div className="w-full h-[520px] bg-black">
+                          {/* Screen Iframe Area - Maximized Viewport */}
+                          <div className="w-full h-[580px] bg-black">
                             <iframe
                               srcDoc={activeApp.code}
                               title="Desktop Application Preview"
@@ -1664,29 +1732,95 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                       </div>
                     )
                   ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-t-xl text-xs text-slate-300 font-mono">
-                        <span>{activeApp.title.toLowerCase().replace(/\s+/g, '-')}.html</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(activeApp.code);
-                            setCopiedCode(true);
-                            setTimeout(() => setCopiedCode(false), 2000);
-                            showToast('Code copied to clipboard!', 'success');
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 font-sans text-xs font-bold"
-                        >
-                          {copiedCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                          <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
-                        </button>
+                    <div className="space-y-2 rounded-2xl bg-slate-950 border border-slate-800/90 overflow-hidden shadow-2xl">
+                      {/* Code Editor Header */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 bg-slate-900/90 border-b border-slate-800 text-xs text-slate-300 font-mono">
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                          </div>
+                          <span className="text-cyan-300 font-bold text-[11px]">{activeApp.title.toLowerCase().replace(/\s+/g, '-')}.html</span>
+                          <span className="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 text-[9px] font-bold border border-purple-800/50">
+                            {activeApp.code.split('\n').length} lines
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCodeSlimMode(!codeSlimMode)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
+                              codeSlimMode ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40' : 'bg-slate-800 text-slate-400'
+                            }`}
+                            title="Toggle Slim Monospaced Typography"
+                          >
+                            <Sparkles className="w-3 h-3 text-purple-300" />
+                            <span>{codeSlimMode ? 'Slim Font: ON' : 'Slim Font: OFF'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(activeApp.code);
+                              setCopiedCode(true);
+                              setTimeout(() => setCopiedCode(false), 2000);
+                              showToast('Code copied to clipboard!', 'success');
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 font-sans text-xs font-bold transition-all"
+                          >
+                            {copiedCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-cyan-400" />}
+                            <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => downloadCodeFile(`${activeApp.title.toLowerCase().replace(/\s+/g, '-')}.html`, activeApp.code)}
+                            className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 transition-all"
+                            title="Download Source Code"
+                          >
+                            <Download className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
-                      <textarea
-                        readOnly
-                        value={activeApp.code}
-                        rows={16}
-                        className="w-full p-3 bg-slate-950 border border-slate-800 rounded-b-xl text-xs font-mono text-cyan-300 focus:outline-none leading-relaxed"
-                      />
+
+                      {/* Slim Code Editor Body with Vertical Percentage Line & Line Numbers */}
+                      <div className="flex bg-[#070712] relative min-h-[480px] max-h-[580px] overflow-hidden">
+                        {/* Standing Vertical Percentage & Progress Rail */}
+                        <div className="w-12 bg-[#04040A] border-r border-slate-800/80 flex flex-col items-center justify-between py-3 px-1 select-none shrink-0 font-mono text-[9px]">
+                          <div className="flex flex-col items-center">
+                            <span className="text-[8px] font-bold text-emerald-400">100%</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-0.5 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                          </div>
+
+                          {/* Upright Standing Line Track */}
+                          <div className="w-1.5 flex-1 my-2 bg-slate-900 rounded-full relative overflow-hidden flex flex-col justify-end border border-slate-800">
+                            <div className="w-full h-full bg-gradient-to-t from-cyan-400 via-indigo-500 to-purple-500 rounded-full shadow-[0_0_10px_rgba(34,211,238,0.8)]" />
+                          </div>
+
+                          <div className="flex flex-col items-center">
+                            <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mb-0.5" />
+                            <span className="text-[8px] font-bold text-cyan-400">0%</span>
+                          </div>
+                        </div>
+
+                        {/* Slim Line Numbers */}
+                        <div className="py-3 px-2 bg-[#06060F] text-slate-600 select-none text-right font-mono text-[10px] leading-[18px] border-r border-slate-800/60 shrink-0 min-w-[38px]">
+                          {activeApp.code.split('\n').slice(0, 80).map((_, i) => (
+                            <div key={i} className="text-slate-600/80">{String(i + 1).padStart(2, '0')}</div>
+                          ))}
+                        </div>
+
+                        {/* Slim Code Content Area */}
+                        <div className="flex-1 overflow-auto p-3">
+                          <pre className={`font-mono text-cyan-300 font-normal leading-[18px] whitespace-pre tracking-tight ${
+                            codeSlimMode ? 'text-[11px] font-light' : 'text-xs'
+                          }`}>
+                            {activeApp.code}
+                          </pre>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1907,40 +2041,139 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
               </div>
             )}
 
-            {/* LIVE AGENT TERMINAL STREAM LOGS */}
+            {/* LIVE AGENT TERMINAL & SLIM CODE STREAM WITH VERTICAL PERCENTAGE LINE (KHADI LINE) */}
             {(isBuildingApp || agentLogs.length > 0) && (
-              <div className="p-5 rounded-2xl bg-slate-950 border-2 border-purple-500/30 space-y-3 font-mono text-xs shadow-2xl relative overflow-hidden">
-                <div className="flex items-center justify-between text-slate-300 border-b border-slate-900 pb-2.5">
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#080814] border-2 border-purple-500/30 space-y-3 font-mono text-xs shadow-2xl relative overflow-hidden">
+                {/* Top Terminal Header */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-slate-300 border-b border-slate-800/80 pb-2.5">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-3 h-3 rounded-full bg-cyan-400 animate-ping"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
                     <Terminal className="w-4 h-4 text-cyan-400" />
-                    <span className="font-extrabold text-white text-sm">AI Agent Live Coding Stream</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-xs">
-                    <span className="text-purple-300 font-bold bg-purple-500/10 px-2.5 py-1 rounded-full border border-purple-500/30">
-                      {agentProgressPct}% Completed
+                    <span className="font-extrabold text-white text-sm tracking-tight">AI Agent Live Coding Stream</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-700/40 font-bold">
+                      {selectedModel}
                     </span>
-                    {isBuildingApp && <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin" />}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCodeSlimMode(!codeSlimMode)}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
+                        codeSlimMode ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/40' : 'bg-slate-900 text-slate-400'
+                      }`}
+                      title="Toggle Ultra Slim Font Styling"
+                    >
+                      <Sparkles className="w-3 h-3 text-cyan-400" />
+                      <span>{codeSlimMode ? 'Patla (Slim) Code: ON' : 'Patla Code: OFF'}</span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5 bg-purple-950/80 px-2.5 py-1 rounded-full border border-purple-500/30 text-purple-200 text-[11px] font-bold">
+                      <span>{agentProgressPct}%</span>
+                      {isBuildingApp && <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin" />}
+                    </div>
                   </div>
                 </div>
 
-                {/* Progress bar */}
-                <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
-                  <div
-                    className="h-full bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400 transition-all duration-300 shadow-[0_0_15px_rgba(34,211,238,0.8)]"
-                    style={{ width: `${agentProgressPct}%` }}
-                  />
-                </div>
-
-                <div className="space-y-1.5 max-h-44 overflow-y-auto pt-1 text-xs text-slate-300">
-                  {agentLogs.map((log, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5">
-                      <span className="text-purple-400 font-bold select-none">&gt;</span>
-                      <span className={idx === agentLogs.length - 1 ? 'text-cyan-300 font-bold' : 'text-slate-300'}>
-                        {log}
-                      </span>
+                {/* MAIN SPLIT CONTAINER: SLIM MONOSPACED LIVE CODE (LEFT) + KHADI LINE ON RIGHT SIDE (TOP TO BOTTOM) */}
+                <div className="grid grid-cols-12 gap-3 bg-[#04040A] rounded-xl border border-slate-800/90 overflow-hidden shadow-inner min-h-[300px]">
+                  {/* LEFT: SLIM LIVE MONOSPACED CODE STREAMING TERMINAL ("PATLA SA CODE") */}
+                  <div className="col-span-9 sm:col-span-10 flex flex-col justify-between p-3 overflow-hidden">
+                    {/* Live Stream Status Bar */}
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 pb-2 border-b border-slate-800/80 mb-2">
+                      <div className="flex items-center gap-1.5 font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-slate-300 font-bold">index.html</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-cyan-400">Live AI Code Generation</span>
+                      </div>
+                      <div className="flex items-center gap-2 font-mono text-[9px]">
+                        <span className="text-purple-400">⚡ ~145 tok/s</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-400">UTF-8</span>
+                      </div>
                     </div>
-                  ))}
+
+                    {/* Slim Monospaced Code Box with Line Numbers */}
+                    <div className="flex-1 flex overflow-auto max-h-56 bg-[#030308] p-2 rounded-lg border border-slate-900 font-mono text-[11px] leading-[18px]">
+                      {/* Slim Line Numbers Column */}
+                      <div className="text-slate-700 select-none text-right pr-2.5 border-r border-slate-800/60 shrink-0 text-[10px] leading-[18px]">
+                        {(liveStreamingCode || (generatedApp ? generatedApp.code : '<!DOCTYPE html>\n<html>\n<head>...\n<body>...'))
+                          .split('\n')
+                          .slice(0, 45)
+                          .map((_, i) => (
+                            <div key={i} className="text-slate-600/70">{String(i + 1).padStart(2, '0')}</div>
+                          ))}
+                      </div>
+
+                      {/* Code Content in Slim Monospaced Typography */}
+                      <div className="pl-3 overflow-x-auto flex-1">
+                        <pre className={`text-cyan-300 tracking-tight whitespace-pre font-mono ${
+                          codeSlimMode ? 'text-[11px] font-light leading-[18px]' : 'text-xs font-normal leading-relaxed'
+                        }`}>
+                          {liveStreamingCode || (generatedApp ? generatedApp.code : `<!DOCTYPE html>\n<html lang="en" class="dark">\n<head>\n  <meta charset="UTF-8">\n  <title>${appPrompt || 'AI Web App'}</title>\n  <script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="bg-slate-950 text-white">\n  <!-- Generating responsive UI components... -->\n`)}
+                        </pre>
+                        {isBuildingApp && (
+                          <span className="inline-block w-1.5 h-3.5 bg-cyan-400 animate-pulse align-middle ml-0.5 shadow-[0_0_6px_rgba(34,211,238,1)]" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Step-by-Step AI Log Notes */}
+                    <div className="mt-2 pt-2 border-t border-slate-900/90 space-y-1 max-h-20 overflow-y-auto text-[10px] text-slate-400">
+                      {agentLogs.map((log, idx) => (
+                        <div key={idx} className="flex items-start gap-1.5">
+                          <span className="text-purple-400 font-bold select-none">&gt;</span>
+                          <span className={idx === agentLogs.length - 1 ? 'text-cyan-300 font-bold' : 'text-slate-400'}>
+                            {log}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* RIGHT: KHADI LINE (STANDING VERTICAL PERCENTAGE LINE ON RIGHT SIDE - RUNNING TOP TO BOTTOM) */}
+                  <div className="col-span-3 sm:col-span-2 bg-[#060610] border-l border-slate-800/80 p-2.5 flex flex-col items-center justify-between select-none relative">
+                    {/* Top 100% Milestone */}
+                    <div className="flex flex-col items-center text-center">
+                      <div className={`w-2.5 h-2.5 rounded-full ${agentProgressPct >= 100 ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)]' : 'bg-slate-700'} transition-all`} />
+                      <span className={`text-[9px] font-bold mt-1 ${agentProgressPct >= 100 ? 'text-emerald-400' : 'text-slate-500'}`}>100%</span>
+                      <span className="text-[8px] text-slate-600 font-sans hidden sm:block">Ready</span>
+                    </div>
+
+                    {/* 75% Milestone Mark */}
+                    <div className="flex items-center gap-1 w-full justify-center">
+                      <div className={`w-1.5 h-1.5 rounded-full ${agentProgressPct >= 75 ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]' : 'bg-slate-800'}`} />
+                      <span className={`text-[8px] font-bold ${agentProgressPct >= 75 ? 'text-indigo-300' : 'text-slate-600'}`}>75%</span>
+                    </div>
+
+                    {/* 50% Milestone Mark */}
+                    <div className="flex items-center gap-1 w-full justify-center">
+                      <div className={`w-1.5 h-1.5 rounded-full ${agentProgressPct >= 50 ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'bg-slate-800'}`} />
+                      <span className={`text-[8px] font-bold ${agentProgressPct >= 50 ? 'text-cyan-300' : 'text-slate-600'}`}>50%</span>
+                    </div>
+
+                    {/* 25% Milestone Mark */}
+                    <div className="flex items-center gap-1 w-full justify-center">
+                      <div className={`w-1.5 h-1.5 rounded-full ${agentProgressPct >= 25 ? 'bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.8)]' : 'bg-slate-800'}`} />
+                      <span className={`text-[8px] font-bold ${agentProgressPct >= 25 ? 'text-purple-300' : 'text-slate-600'}`}>25%</span>
+                    </div>
+
+                    {/* Central Vertical Standing Rail (Khadi Line - Top to Bottom Gradient) */}
+                    <div className="absolute top-10 bottom-10 left-1/2 -translate-x-1/2 w-1.5 bg-slate-900 rounded-full overflow-hidden flex flex-col justify-start border border-slate-800 -z-0">
+                      <div
+                        className="w-full bg-gradient-to-b from-cyan-400 via-indigo-500 to-purple-500 rounded-full transition-all duration-300 shadow-[0_0_12px_rgba(34,211,238,0.9)]"
+                        style={{ height: `${agentProgressPct}%` }}
+                      />
+                    </div>
+
+                    {/* Bottom 0% Milestone */}
+                    <div className="flex flex-col items-center text-center mt-1">
+                      <span className="text-[8px] text-slate-600 font-sans hidden sm:block">Init</span>
+                      <span className="text-[9px] font-bold text-cyan-400">0%</span>
+                      <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] mt-0.5" />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1963,10 +2196,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
           <button
             onClick={handleRunDeepResearch}
             disabled={isResearching}
-            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
             {isResearching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
-            <span>Run Gemini Deep Research Agent (3 Credits)</span>
+            <span>Run Gemini Deep Research Agent</span>
           </button>
           {researchResult && (
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
@@ -1992,10 +2225,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
           <button
             onClick={handleRunVisionUi}
             disabled={isVisionBuilding}
-            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
             {isVisionBuilding ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Layout className="w-4 h-4" />}
-            <span>Compile UI Wireframe to Code (1 Credit)</span>
+            <span>Compile UI Wireframe to Code</span>
           </button>
           {visionResult && (
             <div className="space-y-3">
@@ -2022,10 +2255,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
           <button
             onClick={handleRunVoiceArchitect}
             disabled={isVoiceGenerating}
-            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
             {isVoiceGenerating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-            <span>Synthesize Voice & Speech Handlers (2 Credits)</span>
+            <span>Synthesize Voice & Speech Handlers</span>
           </button>
           {voiceResult && (
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
@@ -2064,10 +2297,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
           <button
             onClick={handleRunDebugger}
             disabled={isDebugging}
-            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
             {isDebugging ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
-            <span>Fix Bugs & Refactor Code (1 Credit)</span>
+            <span>Fix Bugs & Refactor Code</span>
           </button>
           {debugResult && (
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800">
@@ -2104,10 +2337,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
           <button
             onClick={handleRunDbArchitect}
             disabled={isGeneratingDb}
-            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
             {isGeneratingDb ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-            <span>Generate DB DDL & Express Endpoints (1 Credit)</span>
+            <span>Generate DB DDL & Express Endpoints</span>
           </button>
           {dbResult && (
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800">
@@ -2139,10 +2372,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
           <button
             onClick={handleRunSeoGen}
             disabled={isGeneratingSeo}
-            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
             {isGeneratingSeo ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            <span>Generate SEO Strategy & Schema (1 Credit)</span>
+            <span>Generate SEO Strategy & Schema</span>
           </button>
           {seoResult && (
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800">
@@ -2174,10 +2407,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
           <button
             onClick={handleRunBrandGen}
             disabled={isGeneratingBrand}
-            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
             {isGeneratingBrand ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Palette className="w-4 h-4" />}
-            <span>Generate Brand SVG Logo & Color Palette (1 Credit)</span>
+            <span>Generate Brand SVG Logo & Color Palette</span>
           </button>
           {brandResult && (
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
@@ -2214,10 +2447,10 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
           <button
             onClick={handleRunSecurityAudit}
             disabled={isAuditing}
-            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
             {isAuditing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
-            <span>Run Security Scan & Scorecard (1 Credit)</span>
+            <span>Run Security Scan & Scorecard</span>
           </button>
           {auditResult && (
             <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800">
@@ -2907,7 +3140,7 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                     rel="noreferrer"
                     className="text-[11px] text-purple-400 hover:underline flex items-center gap-1"
                   >
-                    <span>Get Key from Google AI Studio</span>
+                    <span>Get Free Key from Google AI Studio</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </label>
@@ -2916,12 +3149,45 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                   <input
                     type="password"
                     value={tempApiKey}
-                    onChange={(e) => setTempApiKey(e.target.value)}
+                    onChange={(e) => {
+                      setTempApiKey(e.target.value);
+                      setKeyTestResult(null);
+                    }}
                     placeholder="AIzaSy..."
-                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 font-mono text-xs focus:outline-none focus:border-purple-500 placeholder-slate-600"
+                    className="w-full pl-10 pr-24 py-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 font-mono text-xs focus:outline-none focus:border-purple-500 placeholder-slate-600"
                   />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (text) {
+                          setTempApiKey(text.trim());
+                          setKeyTestResult(null);
+                          showToast('Pasted API key from clipboard!', 'info');
+                        }
+                      } catch {
+                        showToast('Please paste directly into the input box.', 'info');
+                      }
+                    }}
+                    className="absolute right-2 top-2 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold transition-all"
+                  >
+                    Paste
+                  </button>
                 </div>
               </div>
+
+              {/* Status or Test Result Notification */}
+              {keyTestResult && (
+                <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                  keyTestResult.success
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                }`}>
+                  {keyTestResult.success ? <Check className="w-4 h-4 text-emerald-400 shrink-0" /> : <Shield className="w-4 h-4 text-rose-400 shrink-0" />}
+                  <span>{keyTestResult.message}</span>
+                </div>
+              )}
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 space-y-1">
                 <div className="flex items-center gap-1.5 text-slate-300 font-bold">
@@ -2929,14 +3195,25 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
                   <span>Key Security & Privacy</span>
                 </div>
                 <p>
-                  Your API key is stored locally in your browser session and transmitted directly to secure server API proxies. It is never logged or shared.
+                  Your API key is stored securely in your local browser and sent directly to Google Gemini models via server proxies. It is never logged, stored in public databases, or shared with third parties.
                 </p>
               </div>
 
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
                 <button
+                  type="button"
+                  onClick={handleTestApiKey}
+                  disabled={isTestingKey || !tempApiKey.trim()}
+                  className="w-full sm:w-auto px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                >
+                  {isTestingKey ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-cyan-400" />}
+                  <span>{isTestingKey ? 'Testing Key...' : '⚡ Test Connection'}</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleSaveApiKey}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all"
+                  className="flex-1 w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all"
                 >
                   <Check className="w-4 h-4" />
                   <span>Save Custom API Key</span>
@@ -2944,14 +3221,16 @@ export const AiWebsiteBuilderHub: React.FC<AiWebsiteBuilderHubProps> = ({ initia
 
                 {userApiKey && (
                   <button
+                    type="button"
                     onClick={() => {
                       setTempApiKey('');
                       setUserApiKey('');
+                      setKeyTestResult(null);
                       localStorage.removeItem('onehost_google_api_key');
-                      showToast('Custom Google API Key cleared.', 'info');
+                      showToast('Custom Google API Key cleared. Using default system key.', 'info');
                       setIsApiKeyModalOpen(false);
                     }}
-                    className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-rose-900/40 text-rose-300 border border-slate-700 hover:border-rose-500/40 font-bold text-xs transition-all"
+                    className="w-full sm:w-auto px-3 py-3 rounded-xl bg-slate-800 hover:bg-rose-900/40 text-rose-300 border border-slate-700 hover:border-rose-500/40 font-bold text-xs transition-all"
                   >
                     Clear Key
                   </button>

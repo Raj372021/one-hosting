@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Bot, Send, X, ShieldCheck, Zap, Activity } from 'lucide-react';
+import { Sparkles, Bot, Send, X, ShieldCheck, Zap, Activity, ArrowLeft } from 'lucide-react';
 import { runAiDiagnostic } from '../services/api';
 
 interface AiAdvisorModalProps {
@@ -36,16 +36,20 @@ export const AiAdvisorModal: React.FC<AiAdvisorModalProps> = ({ isOpen, onClose 
             <div>
               <div className="font-bold text-lg text-white flex items-center gap-2">
                 <span>OneHost AI Server Diagnostic & Optimizer</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  GEMINI 2.5
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  GEMINI 3.7 FLASH
                 </span>
               </div>
               <p className="text-xs text-slate-400">Intelligent Server Health & Speed Optimizer</p>
             </div>
           </div>
 
-          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className="px-3.5 py-1.5 rounded-xl text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer group"
+          >
+            <ArrowLeft className="w-4 h-4 text-purple-400 group-hover:-translate-x-0.5 transition-transform" />
+            <span>← Back / Close</span>
           </button>
         </div>
 

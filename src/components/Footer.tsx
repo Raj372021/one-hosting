@@ -91,13 +91,14 @@ export const Footer: React.FC = () => {
         </div>
 
         <div>
-          <div className="font-bold text-white text-sm mb-4">Platform & Tools</div>
+          <div className="font-bold text-white text-sm mb-4">Company & Legal</div>
           <ul className="space-y-2.5 text-xs">
-            <li><button onClick={() => setCurrentView('deployments')} className="hover:text-emerald-400 transition-colors">GitHub Auto Deployment</button></li>
-            <li><button onClick={() => setCurrentView('dashboard')} className="hover:text-emerald-400 transition-colors">cPanel & Web Terminal</button></li>
-            <li><button onClick={() => setCurrentView('billing')} className="hover:text-emerald-400 transition-colors">GST Tax Invoices</button></li>
-            <li><button onClick={() => setCurrentView('tickets')} className="hover:text-emerald-400 transition-colors">Priority 24/7 Support</button></li>
-            <li><button onClick={() => setCurrentView('admin')} className="hover:text-purple-400 transition-colors">Admin Command Portal</button></li>
+            <li><button onClick={() => setCurrentView('about')} className="hover:text-indigo-400 transition-colors">About Us</button></li>
+            <li><button onClick={() => setCurrentView('contact')} className="hover:text-indigo-400 transition-colors">Contact Us & Support</button></li>
+            <li><button onClick={() => setCurrentView('privacy')} className="hover:text-indigo-400 transition-colors">Privacy Policy</button></li>
+            <li><button onClick={() => setCurrentView('terms')} className="hover:text-indigo-400 transition-colors">Terms of Service</button></li>
+            <li><button onClick={() => setCurrentView('refund')} className="hover:text-indigo-400 transition-colors">Refund & Cancellation</button></li>
+            <li><button onClick={() => setCurrentView('sla')} className="hover:text-indigo-400 transition-colors">99.99% Uptime SLA</button></li>
           </ul>
         </div>
       </div>
@@ -109,14 +110,20 @@ export const Footer: React.FC = () => {
             <span>© 2026 OneHost Cloud Solutions Ltd. All rights reserved.</span>
           </div>
 
-          <div className="flex items-center gap-4 text-slate-500">
-            <span className="hover:text-slate-300 cursor-pointer">Privacy Policy</span>
+          <div className="flex flex-wrap items-center gap-3 text-slate-500">
+            <button onClick={() => setCurrentView('about')} className="hover:text-slate-300 transition-colors cursor-pointer">About</button>
             <span>•</span>
-            <span className="hover:text-slate-300 cursor-pointer">Terms of Service</span>
+            <button onClick={() => setCurrentView('contact')} className="hover:text-slate-300 transition-colors cursor-pointer">Contact</button>
             <span>•</span>
-            <span className="hover:text-slate-300 cursor-pointer">SLA Guarantee</span>
+            <button onClick={() => setCurrentView('privacy')} className="hover:text-slate-300 transition-colors cursor-pointer">Privacy Policy</button>
             <span>•</span>
-            <span className="hover:text-slate-300 cursor-pointer">GSTIN: 27AABCU9603R1ZM</span>
+            <button onClick={() => setCurrentView('terms')} className="hover:text-slate-300 transition-colors cursor-pointer">Terms</button>
+            <span>•</span>
+            <button onClick={() => setCurrentView('refund')} className="hover:text-slate-300 transition-colors cursor-pointer">Refund Policy</button>
+            <span>•</span>
+            <button onClick={() => setCurrentView('sla')} className="hover:text-slate-300 transition-colors cursor-pointer">SLA</button>
+            <span>•</span>
+            <span className="text-slate-400 font-mono">GSTIN: 27AABCU9603R1ZM</span>
           </div>
         </div>
       </div>

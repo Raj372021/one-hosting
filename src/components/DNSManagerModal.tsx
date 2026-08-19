@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { RegisteredDomain, DNSRecord } from '../types';
 import { updateDomainDNS } from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { Globe, Plus, Trash2, Save, X, Shield, Server, CheckCircle2 } from 'lucide-react';
+import { Globe, Plus, Trash2, Save, X, Shield, Server, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 interface DNSManagerModalProps {
   domain: RegisteredDomain | null;
@@ -81,8 +81,12 @@ export const DNSManagerModal: React.FC<DNSManagerModalProps> = ({ domain, onClos
             </div>
           </div>
 
-          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className="px-3.5 py-1.5 rounded-xl text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer group"
+          >
+            <ArrowLeft className="w-4 h-4 text-purple-400 group-hover:-translate-x-0.5 transition-transform" />
+            <span>← Back / Close</span>
           </button>
         </div>
 
